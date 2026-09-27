@@ -1,13 +1,22 @@
-"""Sincronización Notion <-> Agente Pre-Autorización. pip install notion-client"""
-import os, json
-from datetime import date, datetime
-from notion_client import Client
-from agente_preauth import Poliza, InformeMedico, evaluar
+"""Sincronizacion Notion <-> agente de pre-autorizacion.
 
-notion = Client(auth=os.environ["NOTION_TOKEN"])
-DB_INF = os.environ["NOTION_DB_INFORMES"]
-DB_POL = os.environ["NOTION_DB_POLIZAS"]
-DB_RES = os.environ["NOTION_DB_RESOLUCIONES"]
+Ejecutar desde la raiz del repo:  python -m preauth.notion_repo
+"""
+import json
+from datetime import date
+from functools import lru_cache
+
+from notion_client import Client
+
+from preauth.config import notion_settings
+from preauth.extraccion import extraer_desde_texto
+from preauth.reglas import InformeMedico, Poliza, evaluar
+
+
+@lru_cache(maxsize=1)
+def get_client() -> Client:
+    """Crea el cliente de Notion la primera vez que se necesita, no al importar."""
+    return Client(auth=notion_settings().token)
 
 def get_text(props, name):
     p = props.get(name, {})
@@ -21,6 +30,7 @@ def get_text(props, name):
     return ""
 
 def q(db, **kw):
+    notion = get_client()
     # Acepta database_id o data_source_id y resuelve automáticamente
     try:
         return notion.data_sources.query(data_source_id=db, **kw)
@@ -39,7 +49,7 @@ def get2(pr, *names):
     return ""
 
 def fetch_polizas():
-    res = q(DB_POL)
+    res = q(notion_settings().db_polizas)
     out = {}
     for pg in res["results"]:
         pr = pg["properties"]
@@ -62,39 +72,11 @@ def fetch_polizas():
             get2(pr, "requiere_segunda_opinion") or [])
     return out
 
-import re
-from agente_preauth import DOCS_POR_PROCEDIMIENTO, DOCS_BASE
-
-PROCEDIMIENTOS_CONOCIDOS = ["Colecistectomía", "Artroplastia", "Apendicectomía", "Cataratas", "Hernia inguinal", "Rinoplastia estética"]
-CIE_RE = re.compile(r"\b[A-Z]\d{2}(?:\.\d)?\b")
-PID_RE = re.compile(r"\bP\d{3}\b")
-MED_RE = re.compile(r"\b[Dd]r[a]?\.?\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)")
-COST_RE = re.compile(r"(?:por\s+|costo\s*|presupuesto[^0-9]{0,20})(\d{3,6})|\b(\d{3,6})\s*(?:€|\$|USD|euros?)", re.I)
-DOC_KEYWORDS = {"identificacion": ["dni", "identificacion", "cedula"], "informe_medico": ["informe"],
-    "consentimiento": ["consentimiento"], "ecografia_abdominal": ["ecografia"],
-    "analitica": ["analitica", "analítica", "sangre"], "radiografia": ["radiografia"],
-    "segunda_opinion": ["segunda opinion"], "presupuesto_hospital": ["presupuesto", "costo", "€", "$"]}
-
-def extraer_desde_texto(texto: str) -> dict:
-    t = (texto or "").lower()
-    proc = next((p for p in PROCEDIMIENTOS_CONOCIDOS if p.lower() in t), "")
-    m = CIE_RE.search(texto or "")
-    docs = [d for d, kws in DOC_KEYWORDS.items() if any(k in t for k in kws)]
-    urg = "emergencia" if any(w in t for w in ["urgente", "emergencia", "emergency"]) else "programada"
-    mp = PID_RE.search(texto or "")
-    mm = MED_RE.search(texto or "")
-    mc = COST_RE.search(texto or "")
-    costo = None
-    if mc:
-        costo = int(next(g for g in mc.groups() if g))
-    return {"procedimiento": proc, "cie": m.group(0) if m else "", "documentos": docs, "urgencia": urg,
-            "paciente_id": mp.group(0) if mp else "",
-            "medico": mm.group(0).strip() if mm else "",
-            "costo": costo}
-
 def run_once(autofill=True):
+    notion = get_client()
+    cfg = notion_settings()
     polizas = fetch_polizas()
-    pend = q(DB_INF,
+    pend = q(cfg.db_informes,
         filter={"property": "estado", "status": {"equals": "pendiente"}})
     for pg in pend["results"]:
         pr = pg["properties"]
@@ -144,7 +126,7 @@ def run_once(autofill=True):
             get_text(pr, "documentos") or [],
             get_text(pr, "costo_estimado") or 0)
         r = evaluar(pol, inf)
-        notion.pages.create(parent={"data_source_id": DB_RES}, properties={
+        notion.pages.create(parent={"data_source_id": cfg.db_resoluciones}, properties={
             "paciente_id": {"title": [{"text": {"content": pid}}]},
             "decision": {"select": {"name": r["decision"].value}},
             "motivo": {"rich_text": [{"text": {"content": r["motivo"][:2000]}}]},
