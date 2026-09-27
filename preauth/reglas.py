@@ -2,6 +2,7 @@
 Agente de Pre-Autorización Quirúrgica en Tiempo Real
 Flujo: Notion DB (Informe Hospital + Póliza) -> Agente IA -> Decisión instantánea
 """
+import calendar
 from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import List, Literal
@@ -92,7 +93,17 @@ def _buscar(tabla: dict, clave: str, por_defecto):
     return por_defecto
 
 def meses_afiliado(poliza: Poliza, hoy: date) -> int:
-    return (hoy.year - poliza.fecha_inicio.year) * 12 + (hoy.month - poliza.fecha_inicio.month)
+    """Meses COMPLETOS de afiliacion al dia 'hoy'. Nunca es negativo.
+
+    Un mes se cumple el mismo dia del mes siguiente. Si ese dia no existe
+    (inicio el 31 y el mes tiene menos dias), se cumple el ultimo dia del mes.
+    """
+    inicio = poliza.fecha_inicio
+    meses = (hoy.year - inicio.year) * 12 + (hoy.month - inicio.month)
+    ultimo_dia_del_mes = calendar.monthrange(hoy.year, hoy.month)[1]
+    if hoy.day < inicio.day and hoy.day != ultimo_dia_del_mes:
+        meses -= 1
+    return max(meses, 0)
 
 PROCEDIMIENTOS_SIN_DATO = {"", "desconocido"}
 MOTIVO_PREAPROBADA = "Cumple cobertura, carencia y documentación. Pre-aprobación emitida."
@@ -113,6 +124,17 @@ def _regla_datos(informe: InformeMedico) -> List[Hallazgo]:
                          "El informe no indica un procedimiento reconocible; requiere revisión manual.")]
     return []
 
+def _poliza_vigente(poliza: Poliza, hoy: date) -> bool:
+    return poliza.fecha_inicio <= hoy
+
+
+def _regla_vigencia(poliza: Poliza, hoy: date) -> List[Hallazgo]:
+    if not _poliza_vigente(poliza, hoy):
+        return [Hallazgo("vigencia", Resultado.REVISION,
+                         f"La póliza inicia el {poliza.fecha_inicio.isoformat()}, después de la "
+                         f"fecha de evaluación ({hoy.isoformat()}); requiere revisión manual.")]
+    return [Hallazgo("vigencia", Resultado.CUMPLE,
+                     f"Póliza vigente desde {poliza.fecha_inicio.isoformat()}.")]
 
 def _regla_cobertura(poliza: Poliza, informe: InformeMedico) -> List[Hallazgo]:
     if norm(informe.procedimiento) in PROCEDIMIENTOS_SIN_DATO:
@@ -129,6 +151,8 @@ def _regla_carencia(poliza: Poliza, informe: InformeMedico, hoy: date) -> List[H
     if norm(informe.urgencia) == "emergencia":
         return [Hallazgo("carencia", Resultado.INFORMATIVO,
                          "Emergencia: se omitió la carencia; requiere revisión posterior.")]
+    if not _poliza_vigente(poliza, hoy):
+        return []  # sin vigencia no hay carencia que evaluar (ver _regla_vigencia)
     carencia_req = _buscar(poliza.carencia_meses, informe.procedimiento,
                            _buscar(poliza.carencia_meses, "default", 0))
     antiguedad = meses_afiliado(poliza, hoy)
@@ -172,15 +196,19 @@ def _motivo(decision: Decision, hallazgos: List[Hallazgo]) -> str:
     return " ".join(principales + informativos)
 
 
-def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) -> dict:
+def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date | None = None) -> dict:
     """Evalua TODAS las reglas y decide por precedencia (ver decidir()).
 
     Devuelve un dict con las mismas claves de siempre (decision, motivo,
     faltantes y autorizacion_id si se pre-aprueba) mas 'hallazgos'.
     """
+    if hoy is None:
+        hoy = date.today()  # se lee en cada llamada, no una sola vez al importar
+
     faltantes = _documentos_faltantes(poliza, informe)
     hallazgos = (
         _regla_datos(informe)
+        + _regla_vigencia(poliza, hoy)
         + _regla_cobertura(poliza, informe)
         + _regla_carencia(poliza, informe, hoy)
         + _regla_monto(poliza, informe)
