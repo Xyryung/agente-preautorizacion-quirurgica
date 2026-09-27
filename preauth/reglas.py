@@ -154,12 +154,19 @@ def _regla_coherencia(informe: InformeMedico) -> List[Hallazgo]:
     Solo "incoherente" genera un hallazgo, y siempre de REVISION: un juicio clinico
     del modelo puede enviar el caso a una persona, nunca denegarlo.
     """
-    if norm(informe.coherencia_diagnostico or "") != "incoherente":
-        return []
-    justificacion = informe.justificacion_coherencia.strip() or "sin justificación"
-    return [Hallazgo("coherencia", Resultado.REVISION,
-                     f"El diagnóstico no parece justificar el procedimiento ({justificacion}); "
-                     "requiere revisión manual.")]
+    veredicto = norm(informe.coherencia_diagnostico or "")
+    if veredicto == "incoherente":
+        justificacion = informe.justificacion_coherencia.strip() or "sin justificación"
+        return [Hallazgo("coherencia", Resultado.REVISION,
+                         f"El diagnóstico no parece justificar el procedimiento ({justificacion}); "
+                         "requiere revisión manual.")]
+    hay_con_que_evaluar = (informe.diagnostico_cie10.strip()
+                           and norm(informe.procedimiento) not in PROCEDIMIENTOS_SIN_DATO)
+    if veredicto == "no_evaluable" and hay_con_que_evaluar:
+        return [Hallazgo("coherencia", Resultado.REVISION,
+                         f"No se pudo evaluar si el diagnóstico {informe.diagnostico_cie10.strip()} "
+                         f"justifica el procedimiento {informe.procedimiento}; requiere revisión manual.")]
+    return []
 
 def _poliza_vigente(poliza: Poliza, hoy: date) -> bool:
     return poliza.fecha_inicio <= hoy
