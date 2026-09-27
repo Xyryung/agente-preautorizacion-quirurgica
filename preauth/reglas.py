@@ -70,7 +70,8 @@ class InformeMedico:
     documentos_adjuntos: List[str] = field(default_factory=list)
     # docs requeridos base
     costo_estimado: float = 0
-    confianza_extraccion: float = 1.0  # 0..1, la fija el extractor (6b: <0.7 -> REVISION_MANUAL)
+    # Senales de la extraccion automatica (issue #6b). None/vacio: no hubo extraccion.
+    confianza_extraccion: float | None = None
     citas_no_encontradas: List[str] = field(default_factory=list)
 
 DOCS_BASE = ["identificacion", "informe_medico", "consentimiento"]
@@ -108,6 +109,9 @@ def meses_afiliado(poliza: Poliza, hoy: date) -> int:
     return max(meses, 0)
 
 PROCEDIMIENTOS_SIN_DATO = {"", "desconocido"}
+# Red de seguridad, no calibracion: en 10 informes sinteticos los casos normales
+# dieron >= 0.90 y el informe vacio 0.60 (ver README).
+UMBRAL_CONFIANZA = 0.7
 MOTIVO_PREAPROBADA = "Cumple cobertura, carencia y documentación. Pre-aprobación emitida."
 
 # Que hallazgos explican cada decision en el campo 'motivo'.

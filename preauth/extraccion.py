@@ -73,6 +73,7 @@ class ResultadoExtraccion:
     latencia_ms: float
     error: str | None = None        # por que se uso el respaldo, si se uso
     advertencias: tuple[str, ...] = ()
+    citas_no_encontradas: tuple[str, ...] = ()  # evidencia que no aparece en el informe
 
 
 TIMEOUT_S = 20.0
@@ -149,6 +150,9 @@ def _extraer_con_regex(texto: str) -> ExtraccionInforme:
         confianza=0.0,                    # sin autoevaluacion
     )
 
+def citas_no_encontradas(datos: ExtraccionInforme, texto: str) -> list[str]:
+    """Citas de 'evidencia' que NO aparecen en el informe (se implementa en el siguiente commit)."""
+    raise NotImplementedError("issue #6b")
 
 def _normalizar(datos: ExtraccionInforme) -> ExtraccionInforme:
     return datos.model_copy(update={
