@@ -8,15 +8,18 @@
 
 ## Pruébalo en 2 minutos
 
-<!-- Actualizar cuando entre #9 (formulario para pegar un informe y POST /api/evaluar). -->
+1. Abre https://agente-preautorizacion.onrender.com. Si nadie la usó en un rato, la primera carga puede tardar ~30 s mientras el servidor gratuito despierta.
+2. Elige uno de los **10 casos de ejemplo** (se selecciona sola la póliza adecuada) o **pega tu propio informe** en texto libre y elige una de las 4 pólizas de demo.
+3. Presiona **Evaluar**. Verás la **decisión** (`PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES`, `REVISION_MANUAL` o `DENEGADA`), el resultado de **cada regla**, los **documentos faltantes**, los **datos que extrajo la IA** y el **tiempo de respuesta**.
 
-1. Abre https://agente-preautorizacion.onrender.com. Si nadie la usó en un rato, la primera carga puede tardar ~30 s mientras el servidor gratuito despierta; después responde en menos de medio segundo.
-2. La página evalúa en vivo tres casos sintéticos y muestra para cada uno la **decisión**, el **motivo**, los **documentos faltantes** y la **latencia**:
-   - Documentación completa → `PREAPROBADA`
-   - Faltan documentos → `SOLICITUD_DOCUMENTOS_FALTANTES`
-   - Procedimiento no cubierto → `DENEGADA`
-3. El mismo resultado en JSON está en [`/api/demo`](https://agente-preautorizacion.onrender.com/api/demo).
-4. La documentación interactiva de la API está en [`/docs`](https://agente-preautorizacion.onrender.com/docs).
+| Póliza de demo | Escenario |
+|---|---|
+| P001 | Caso base: cubre colecistectomía, apendicectomía y hernia inguinal |
+| P002 | Artroplastia con segunda opinión y 12 meses de carencia; cataratas |
+| P003 | Afiliación reciente: no cumple la carencia, salvo emergencia |
+| P004 | Saldo casi agotado: excede el monto |
+
+Para pruebas técnicas: [`/docs`](https://agente-preautorizacion.onrender.com/docs) documenta `POST /api/evaluar` (botón *Try it out*), que acepta el informe en texto libre o estructurado y la póliza por id o completa. Probar la demo no escribe en Notion.
 
 ## 1. Resumen ejecutivo
 Sistema que elimina la espera de horas/días en la autorización de cirugías. Recibe el **informe médico digital (Hospital)** y la **póliza (Aseguradora)** desde **Notion**, los cruza con reglas de negocio y emite en segundos: `PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES` o `DENEGADA`.

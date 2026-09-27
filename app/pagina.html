@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pre-autorización quirúrgica</title>
+<style>
+  :root { --tinta: #1c2b33; --suave: #5b6b73; --linea: #d5dde1; --fondo: #ffffff; --panel: #f5f8f9;
+          --ok: #1e7a4f; --pend: #9a6200; --rev: #3d5a99; --no: #b3261e; --acento: #1f5f8b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --tinta: #e3e9ec; --suave: #9fb0b8; --linea: #33424a; --fondo: #12191d; --panel: #1a2328;
+            --ok: #5cc58f; --pend: #e0a33a; --rev: #8fa9e6; --no: #f07b72; --acento: #6fb3e0; }
+  }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, "Segoe UI", sans-serif; color: var(--tinta); background: var(--fondo);
+         max-width: 62rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+  p { color: var(--suave); max-width: 70ch; margin: .4rem 0; }
+  .aviso { border-left: 4px solid var(--pend); background: var(--panel); color: var(--tinta);
+           padding: .6rem .9rem; max-width: none; }
+  .panel { background: var(--panel); border: 1px solid var(--linea); border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+  .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 700px) { .fila { grid-template-columns: 1fr; } }
+  label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: .3rem; }
+  select, textarea { width: 100%; font: inherit; color: var(--tinta); background: var(--fondo);
+                     border: 1px solid var(--linea); border-radius: 6px; padding: .5rem; }
+  textarea { min-height: 10rem; resize: vertical; }
+  .ayuda { font-size: .85rem; color: var(--suave); margin-top: .3rem; }
+  button { font: inherit; font-weight: 600; color: #fff; background: var(--acento); border: 0;
+           border-radius: 6px; padding: .6rem 1.4rem; cursor: pointer; margin-top: 1rem; }
+  button:disabled { opacity: .6; cursor: wait; }
+  .decision { font-size: 1.3rem; font-weight: 700; }
+  .PREAPROBADA { color: var(--ok); } .SOLICITUD_DOCUMENTOS_FALTANTES { color: var(--pend); }
+  .REVISION_MANUAL { color: var(--rev); } .DENEGADA { color: var(--no); }
+  ul { margin: .3rem 0; padding-left: 1.2rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--linea); vertical-align: top; }
+  th { color: var(--suave); font-weight: 600; width: 38%; }
+  .r-cumple { color: var(--ok); } .r-no_cumple { color: var(--no); } .r-faltan_documentos { color: var(--pend); }
+  .r-revision { color: var(--rev); } .r-informativo { color: var(--suave); }
+  .error { color: var(--no); font-weight: 600; }
+  .oculto { display: none; }
+  code { font-size: .9em; }
+  a { color: var(--acento); }
+</style>
+</head>
+<body>
+<h1>Agente de pre-autorización quirúrgica</h1>
+<p class="aviso" role="note"><strong>Solo datos sintéticos.</strong> No ingreses datos reales de
+pacientes (Ley 81 de 2019 de protección de datos personales de Panamá).</p>
+<p>Elige un caso de ejemplo o pega tu propio informe médico en texto libre. La IA extrae los datos del
+informe y las reglas de la póliza deciden: preaprobación, solicitud de documentos, revisión manual o denegación.</p>
+
+<form id="formulario" class="panel">
+  <div class="fila">
+    <div>
+      <label for="caso">1. Caso de ejemplo (opcional)</label>
+      <select id="caso"><option value="">Escribir mi propio informe</option></select>
+      <div class="ayuda" id="caso-ayuda"></div>
+    </div>
+    <div>
+      <label for="poliza">2. Póliza del paciente</label>
+      <select id="poliza"></select>
+      <div class="ayuda" id="poliza-ayuda"></div>
+    </div>
+  </div>
+  <label for="texto" style="margin-top:1rem">3. Informe médico</label>
+  <textarea id="texto" maxlength="8000" required
+    placeholder="Ej.: Paciente P001. Colelitiasis (K80.2). Colecistectomía programada. Se adjuntan cédula, informe médico, consentimiento, ecografía abdominal y analítica. Presupuesto: 8000."></textarea>
+  <div class="ayuda"><span id="contador">0</span> / 8000 caracteres</div>
+  <button type="submit" id="evaluar">Evaluar</button>
+</form>
+
+<section id="resultado" class="panel oculto" aria-live="polite">
+  <h2>Resultado</h2>
+  <div id="error" class="error oculto"></div>
+  <div id="contenido">
+    <div class="decision" id="decision"></div>
+    <p id="motivo"></p>
+    <p id="autorizacion"></p>
+    <div class="fila">
+      <div>
+        <h2>Reglas evaluadas</h2>
+        <ul id="hallazgos"></ul>
+        <h2>Documentos faltantes</h2>
+        <ul id="faltantes"></ul>
+      </div>
+      <div>
+        <h2>Datos que extrajo la IA</h2>
+        <table><tbody id="extraccion"></tbody></table>
+        <div class="ayuda" id="extraccion-nota"></div>
+      </div>
+    </div>
+    <p id="latencia"></p>
+  </div>
+</section>
+
+<p>API documentada en <a href="/docs">/docs</a> (<code>POST /api/evaluar</code>).
+Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica">GitHub</a>.</p>
+
+<script id="datos" type="application/json">__DATOS__</script>
+<script>
+(function () {
+  const datos = JSON.parse(document.getElementById("datos").textContent);
+  const $ = (id) => document.getElementById(id);
+  const DECISIONES = {
+    PREAPROBADA: "Preaprobada",
+    SOLICITUD_DOCUMENTOS_FALTANTES: "Solicitud de documentos faltantes",
+    REVISION_MANUAL: "Revisión manual",
+    DENEGADA: "Denegada",
+  };
+  const URGENCIAS = { programada: "Programada", emergencia: "Emergencia", no_indicada: "No indicada (se asume programada)" };
+  const RESULTADOS = { cumple: "✔", no_cumple: "✖", faltan_documentos: "⚠", revision: "?", informativo: "ℹ" };
+
+  for (const [id, p] of Object.entries(datos.polizas)) $("poliza").add(new Option(id + " — " + p.resumen, id));
+  for (const c of datos.casos) $("caso").add(new Option(c.id + " · " + c.descripcion, c.id));
+
+  const mostrarPoliza = () => { $("poliza-ayuda").textContent = datos.polizas[$("poliza").value].descripcion; };
+  const contar = () => { $("contador").textContent = $("texto").value.length; };
+  $("poliza").addEventListener("change", mostrarPoliza);
+  $("texto").addEventListener("input", contar);
+  $("caso").addEventListener("change", () => {
+    const c = datos.casos.find((x) => x.id === $("caso").value);
+    $("caso-ayuda").textContent = c ? "Póliza sugerida: " + c.poliza_id + ". Puedes editar el texto." : "";
+    if (c) { $("texto").value = c.texto; $("poliza").value = c.poliza_id; }
+    mostrarPoliza(); contar();
+  });
+  mostrarPoliza();
+
+  const item = (lista, texto, clase) => {
+    const li = document.createElement("li");
+    li.textContent = texto;
+    if (clase) li.className = clase;
+    lista.appendChild(li);
+  };
+  const filaTabla = (tbody, nombre, valor) => {
+    const tr = tbody.insertRow();
+    const th = document.createElement("th"); th.textContent = nombre; tr.appendChild(th);
+    tr.insertCell().textContent = valor;
+  };
+
+  function pintar(r) {
+    $("decision").textContent = DECISIONES[r.decision] || r.decision;
+    $("decision").className = "decision " + r.decision;
+    $("motivo").textContent = r.motivo;
+    $("autorizacion").textContent = r.autorizacion_id ? "Autorización: " + r.autorizacion_id : "";
+    $("hallazgos").replaceChildren();
+    for (const h of r.hallazgos) item($("hallazgos"), (RESULTADOS[h.resultado] || "") + " " + h.regla + ": " + h.mensaje, "r-" + h.resultado);
+    $("faltantes").replaceChildren();
+    if (r.faltantes.length) r.faltantes.forEach((f) => item($("faltantes"), f)); else item($("faltantes"), "Ninguno");
+    const tb = $("extraccion"); tb.replaceChildren();
+    const e = r.extraccion;
+    if (e) {
+      const d = e.datos;
+      filaTabla(tb, "Procedimiento", d.procedimiento);
+      filaTabla(tb, "Diagnóstico CIE-10", d.cie10 || "—");
+      filaTabla(tb, "Urgencia", URGENCIAS[d.urgencia] || d.urgencia);
+      filaTabla(tb, "Costo estimado", d.costo_estimado == null ? "—" : d.costo_estimado);
+      filaTabla(tb, "Documentos aportados", d.documentos_aportados.join(", ") || "—");
+      filaTabla(tb, "Documentos pendientes", d.documentos_pendientes.join(", ") || "—");
+      filaTabla(tb, "Confianza", e.proveedor === "openai" ? Math.round(d.confianza * 100) + " %" : "— (sin IA)");
+      $("extraccion-nota").textContent = e.respaldo
+        ? "La IA no estuvo disponible: se usó el extractor de respaldo (reglas de texto)."
+        : "Extraído con " + (e.proveedor === "openai" ? "IA (OpenAI)" : "reglas de texto") + ".";
+      for (const a of e.advertencias) $("extraccion-nota").textContent += " " + a;
+    }
+    const l = r.latencia;
+    $("latencia").textContent = "Tiempo: " + (l.total_ms / 1000).toFixed(2) + " s (extracción " +
+      (l.extraccion_ms / 1000).toFixed(2) + " s, reglas " + l.reglas_ms + " ms).";
+  }
+
+  $("formulario").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const texto = $("texto").value.trim();
+    if (!texto) return;
+    $("evaluar").disabled = true; $("evaluar").textContent = "Evaluando…";
+    $("resultado").classList.remove("oculto");
+    $("error").classList.add("oculto"); $("contenido").classList.add("oculto");
+    try {
+      const resp = await fetch("/api/evaluar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ poliza_id: $("poliza").value, texto }),
+      });
+      const cuerpo = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const d = cuerpo.detail;
+        throw new Error(typeof d === "string" ? d : "No se pudo evaluar el informe (" + resp.status + ").");
+      }
+      pintar(cuerpo);
+      $("contenido").classList.remove("oculto");
+    } catch (err) {
+      $("error").textContent = err.message || "No se pudo conectar con el servidor.";
+      $("error").classList.remove("oculto");
+    } finally {
+      $("evaluar").disabled = false; $("evaluar").textContent = "Evaluar";
+    }
+  });
+})();
+</script>
+</body>
+</html>
