@@ -23,7 +23,7 @@ Sistema que elimina la espera de horas/días en la autorización de cirugías. R
                │ polling 60s / webhook
                ▼
 ┌────────────────────────────────────┐
-│ Agente Python (agente_preauth.py)  │
+│ Agente Python (preauth/reglas.py)  │
 │ 1. Cobertura  2. Carencia          │
 │ 3. Monto      4. Documentos        │
 └──────────────┬─────────────────────┘
@@ -70,7 +70,7 @@ Sistema que elimina la espera de horas/días en la autorización de cirugías. R
 | autorizacion_id | Rich text | `AUT-P001-20260926`, solo si aprobada |
 | timestamp | Created time | Auditoría |
 
-## 4. Motor de reglas (`evaluar()` en `agente_preauth.py`)
+## 4. Motor de reglas (`evaluar()` en `preauth/reglas.py`)
 
 Orden estricto, el primero que falla corta (fail-fast):
 
@@ -95,7 +95,7 @@ export NOTION_DB_POLIZAS="id_db_polizas"
 export NOTION_DB_RESOLUCIONES="id_db_resoluciones"
 
 # 3. Prueba local (sin Notion)
-python3 agente_preauth.py
+python -m preauth.reglas
 # Salida esperada: Caso 1 PREAPROBADA, Caso 2 FALTANTES, Caso 3 DENEGADA
 ```
 
@@ -127,3 +127,16 @@ resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
 - Sin OCR/PDF: hoy `documentos` es checklist; integrar OCR para verificar contenido real.
 - Sin autenticación, auditoría HIPAA/GDPR ni reintentos: añadir log inmutable, cifrado y cola con retries.
 - Evolución IA: usar LLM solo para extraer `procedimiento/CIE/documentos` del informe en lenguaje natural, manteniendo las 4 reglas deterministas para la decisión (explicable y auditable).
+
+## Herramientas de IA utilizadas
+
+### En el producto
+| Herramienta | Uso |
+|---|---|
+| OpenAI API (modelo configurado en OPENAI_MODEL) | Extracción estructurada del informe médico y verificación de coherencia diagnóstico-procedimiento. La IA extrae; las reglas deterministas deciden. |
+
+### En el desarrollo
+| Herramienta | Uso | Cómo se verificó |
+|---|---|---|
+| Claude (Anthropic) | Revisión de código, planificación del backlog, esqueleto del servicio web y script de issues | Pruebas locales, revisión en PR |
+| ... | ... | ... |
