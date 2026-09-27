@@ -261,7 +261,10 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
       pintar(cuerpo);
       $("contenido").classList.remove("oculto");
     } catch (err) {
-      $("error").textContent = err.message || "No se pudo conectar con el servidor.";
+      // fetch lanza TypeError ("Failed to fetch") cuando no hay conexion con el servidor.
+      $("error").textContent = err instanceof TypeError
+        ? "No se pudo conectar con el servidor. Revisa tu conexión o espera unos segundos (el servidor gratuito puede estar despertando) e intenta de nuevo."
+        : (err.message || "No se pudo evaluar el informe.");
       $("error").classList.remove("oculto");
     } finally {
       $("evaluar").disabled = false; $("evaluar").textContent = "Evaluar";
