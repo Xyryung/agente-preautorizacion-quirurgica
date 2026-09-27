@@ -8,6 +8,8 @@ import json
 import re
 import urllib.request
 
+from preauth.texto import norm
+
 PROCEDIMIENTOS_CONOCIDOS = ["Colecistectomía", "Artroplastia", "Apendicectomía", "Cataratas", "Hernia inguinal", "Rinoplastia estética"]
 CIE_RE = re.compile(r"\b[A-Z]\d{2}(?:\.\d)?\b")
 PID_RE = re.compile(r"\bP\d{3}\b")
@@ -19,10 +21,10 @@ DOC_KEYWORDS = {"identificacion": ["dni", "identificacion", "cedula"], "informe_
     "segunda_opinion": ["segunda opinion"], "presupuesto_hospital": ["presupuesto", "costo", "€", "$"]}
 
 def extraer_desde_texto(texto: str) -> dict:
-    t = (texto or "").lower()
-    proc = next((p for p in PROCEDIMIENTOS_CONOCIDOS if p.lower() in t), "")
+    t = norm(texto) 
+    proc = next((p for p in PROCEDIMIENTOS_CONOCIDOS if norm(p) in t), "")
     m = CIE_RE.search(texto or "")
-    docs = [d for d, kws in DOC_KEYWORDS.items() if any(k in t for k in kws)]
+    docs = [d for d, kws in DOC_KEYWORDS.items() if any(norm(k) in t for k in kws)]
     urg = "emergencia" if any(w in t for w in ["urgente", "emergencia", "emergency"]) else "programada"
     mp = PID_RE.search(texto or "")
     mm = MED_RE.search(texto or "")
