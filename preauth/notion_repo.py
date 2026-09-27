@@ -87,10 +87,15 @@ def query_all(ds_id: str, dormir=time.sleep, **kw) -> list:
         cursor = resp.get("next_cursor")
 
 
+def _texto_plano(t: dict) -> str:
+    # Notion devuelve "plain_text"; lo que escribimos (autofill) usa text.content.
+    return t.get("plain_text") or t.get("text", {}).get("content", "")
+
+
 def get_text(props, name):
     p = props.get(name, {})
-    if p.get("title"): return "".join(t["plain_text"] for t in p["title"])
-    if p.get("rich_text"): return "".join(t["plain_text"] for t in p["rich_text"])
+    if p.get("title"): return "".join(_texto_plano(t) for t in p["title"])
+    if p.get("rich_text"): return "".join(_texto_plano(t) for t in p["rich_text"])
     if p.get("select"): return p["select"]["name"] if p["select"] else ""
     if p.get("status"): return p["status"]["name"] if p["status"] else ""
     if p.get("multi_select"): return [o["name"] for o in p["multi_select"]]
@@ -169,14 +174,12 @@ def _autofill(notion, pg, pr, pid: str):
     upd = {}
     if ext.get("paciente_id") and not get_text(pr, E.INF_PACIENTE_ID):
         upd[E.INF_PACIENTE_ID] = {"title": [{"text": {"content": ext["paciente_id"]}}]}
-        pr[E.INF_PACIENTE_ID] = {"title": [{"text": {"content": ext["paciente_id"]}}]}
     if ext.get("medico") and not get_text(pr, E.INF_MEDICO):
         upd[E.INF_MEDICO] = {"rich_text": [{"text": {"content": ext["medico"]}}]}
     if ext.get("costo") and not get_text(pr, E.INF_COSTO):
         upd[E.INF_COSTO] = {"number": ext["costo"]}
     if ext.get("urgencia") and not get_text(pr, E.INF_URGENCIA):
         upd[E.INF_URGENCIA] = {"select": {"name": ext["urgencia"]}}
-        pr[E.INF_URGENCIA] = {"select": {"name": ext["urgencia"]}}
     if ext["procedimiento"] and not get_text(pr, E.INF_PROCEDIMIENTO):
         upd[E.INF_PROCEDIMIENTO] = {"select": {"name": ext["procedimiento"]}}
     if ext["cie"] and not get_text(pr, E.INF_DIAGNOSTICO):
@@ -184,10 +187,10 @@ def _autofill(notion, pg, pr, pid: str):
     if ext["documentos"]:
         prev = set(get_text(pr, E.INF_DOCUMENTOS) or [])
         upd[E.INF_DOCUMENTOS] = {"multi_select": [{"name": d} for d in sorted(prev | set(ext["documentos"]))]}
-        pr[E.INF_DOCUMENTOS] = {"multi_select": [{"name": d} for d in sorted(prev | set(ext["documentos"]))]}
     if not upd:
         return ext
-    if E.INF_PROCEDIMIENTO in upd: pr[E.INF_PROCEDIMIENTO] = {"select": {"name": ext["procedimiento"]}}
+    # La evaluacion lee `pr`: debe ver todo lo extraido, no solo lo que se guarda en Notion.
+    pr.update(upd)
     try:
         con_reintentos(notion.pages.update, page_id=pg["id"], properties=upd)
     except APIResponseError as e:

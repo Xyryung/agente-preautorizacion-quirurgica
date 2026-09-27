@@ -106,11 +106,12 @@ def test_doble_ejecucion_no_duplica(monkeypatch):
 
 def test_extraer_devuelve_confianza_y_citas():
     from preauth.extraccion import extraer_desde_texto
-    ext = extraer_desde_texto("Paciente P001 con colecistectomía programada, DNI y consentimiento.")
-    assert ext["confianza"] == 0.8
+    ext = extraer_desde_texto(
+        "Paciente P001 con colecistectomía programada, DNI y consentimiento.",
+        proveedor="regex")
+    assert ext["confianza"] == 0.0  # el regex no se autoevalua
     assert "analitica" in ext["citas_no_encontradas"]
-    ext_vacio = extraer_desde_texto("texto sin datos relevantes 123")
-    assert ext_vacio["confianza"] == 0.3
+    assert "identificacion" not in ext["citas_no_encontradas"]
 
 
 def test_autofill_pasa_confianza_a_informe(monkeypatch):
@@ -155,3 +156,54 @@ def test_autofill_pasa_confianza_a_informe(monkeypatch):
     assert vistos["citas"] == ["analitica"]
     # sin autofill, defaults del dataclass
     assert InformeMedico("P", "X", "K", "M").confianza == 1.0
+
+
+def test_autofill_evalua_con_los_datos_extraidos_del_texto(monkeypatch):
+    """Un informe que llega solo con texto: la decision debe usar lo extraido
+    (costo, medico, diagnostico), no solo lo que se guarda en Notion."""
+    from datetime import date
+
+    from preauth import esquema as E
+    from preauth.reglas import Poliza
+
+    guardado, creadas, evaluados = {}, [], []
+
+    class Pages:
+        def update(self, page_id, properties):
+            guardado.update(properties)
+
+        def create(self, **kw):
+            creadas.append(kw)
+
+    class FakeClient:
+        pages = Pages()
+
+    texto = ("Paciente P002 con hernia inguinal, diagnostico K40. Cirugia programada por la "
+             "Dra. Lopez. Se adjuntan identificacion, informe medico, consentimiento informado, "
+             "analitica y presupuesto del hospital por 6000.")
+    pg = {"id": "inf1", "properties": {
+        E.INF_PACIENTE_ID: {"title": [{"plain_text": "P002"}]},
+        E.INF_TEXTO: {"rich_text": [{"plain_text": texto}]},
+    }}
+    poliza = Poliza("P002", ["Hernia inguinal"], date(2025, 1, 15), {"default": 6}, 80000, 0)
+    evaluar_real = nr.evaluar
+    monkeypatch.setattr(nr, "fetch_poliza", lambda pid, **k: (poliza, None))
+    monkeypatch.setattr(nr, "resolucion_existe", lambda page_id: False)
+    monkeypatch.setattr(nr, "evaluar", lambda pol, inf: evaluados.append(inf) or evaluar_real(pol, inf))
+
+    nr.procesar_informe(FakeClient(), "res", pg)
+
+    inf = evaluados[0]
+    assert inf.costo_estimado == 6000
+    assert inf.diagnostico_cie10 == "K40"
+    assert inf.medico == "Dra. Lopez"
+    assert guardado[E.INF_COSTO] == {"number": 6000}
+    decision = creadas[0]["properties"][E.RES_DECISION]["select"]["name"]
+    assert decision == "PREAPROBADA"
+
+
+def test_get_text_lee_el_formato_de_lectura_y_el_de_escritura():
+    leido = {"x": {"rich_text": [{"plain_text": "Dra. "}, {"plain_text": "Lopez"}]}}
+    escrito = {"x": {"title": [{"text": {"content": "P002"}}]}}
+    assert nr.get_text(leido, "x") == "Dra. Lopez"
+    assert nr.get_text(escrito, "x") == "P002"

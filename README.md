@@ -119,7 +119,28 @@ Si la decisión es `DENEGADA`, `faltantes` queda vacío: una denegación no se c
 
 Se cuentan meses completos: un mes se cumple el mismo día del mes siguiente. Si ese día no existe (póliza iniciada el 31 y un mes con menos días), se cumple el último día de ese mes; por ejemplo, del 31 de enero al 28 de febrero hay un mes. Una póliza que inicia después de la fecha de evaluación no está vigente: el caso pasa a revisión manual y no se evalúa la carencia.
 
-## 5. Cómo ejecutar en local
+## 5. Extracción con IA
+
+El informe en texto libre se convierte en datos estructurados con la API de OpenAI, usando salida estructurada con esquema estricto: el modelo solo puede elegir procedimientos, documentos y urgencias de nuestras listas. La IA **extrae**; las reglas deterministas **deciden**.
+
+- Cada valor viene con `evidencia`: una cita breve del informe que lo justifica, para auditar la extracción.
+- Si la llamada falla (tiempo límite de 20 s, sin clave, error de la API), se usa un extractor por expresiones regulares y el resultado indica que se usó el respaldo. Sin IA, la urgencia nunca se infiere del texto.
+- Se envía con `store=False` y solo con datos sintéticos. Enviar datos reales de pacientes a una API externa requeriría la base legal correspondiente (Ley 81 de 2019).
+- Configuración: `OPENAI_MODEL=gpt-5-mini`, `OPENAI_REASONING_EFFORT=minimal` (ver `.env.example`).
+
+### Precisión y latencia medidas
+
+10 informes sintéticos (`tests/data/informes_sinteticos.json`), una ejecución por configuración. Reproducir con `python -m scripts.evaluar_extraccion --proveedor openai`.
+
+| Configuración | Procedimiento | Urgencia | Costo | CIE-10 | Documentos aportados | Latencia p50 | p95 | Máx. |
+|---|---|---|---|---|---|---|---|---|
+| **`gpt-5-mini`, razonamiento `minimal` (elegida)** | 10/10 | 10/10 | 10/10 | 10/10 | 9/10 | 3,0 s | 4,5 s | 4,9 s |
+| `gpt-5-mini`, razonamiento `low` | 10/10 | 10/10 | 10/10 | 10/10 | 10/10 | 6,5 s | 13,5 s | 17,3 s |
+| Sin IA (expresiones regulares) | 10/10 | 2/10 | 8/10 | 10/10 | 4/10 | < 1 ms | < 1 ms | < 1 ms |
+
+Se eligió `minimal`: con `low` se evita el único error (S10: marcar como aportado el presupuesto porque el informe menciona su monto), pero la latencia se duplica y el máximo (17,3 s) queda cerca del tiempo límite de 20 s, que haría caer el caso al respaldo sin IA. Con 10 informes y una ejecución por configuración, la diferencia de un campo es indicativa, no concluyente.
+
+## 6. Cómo ejecutar en local
 
 Requisitos: Python 3.14 (la misma versión que usan Render y CI) y Git.
 
@@ -161,7 +182,7 @@ resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
 #    notion.pages.update(page_id, properties={"estado": "procesado"})
 ```
 
-## 6. Ejemplos
+## 7. Ejemplos
 
 | Caso | Entrada | Salida |
 |---|---|---|
@@ -172,7 +193,7 @@ resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
 | Emergencia | Igual anterior pero `urgencia=emergencia` | Salta carencia, sigue a monto/documentos |
 | Póliza futura | Póliza que inicia después de la fecha de evaluación | `REVISION_MANUAL`, no se evalúa la carencia |
 
-## 7. Rendimiento medido
+## 8. Rendimiento medido
 
 Medido con `curl` desde Panamá contra el servicio en Render (detalle en [`docs/despliegue.md`](docs/despliegue.md)):
 
@@ -181,17 +202,16 @@ Medido con `curl` desde Panamá contra el servicio en Render (detalle en [`docs/
 | Servicio despierto, n = 20 | p50 **0,28 s** · p95 **0,36 s** |
 | Motor de reglas (dentro del servidor) | < 0,05 ms por caso |
 | Arranque en frío (plan gratuito, tras 15 min sin tráfico) | 32,6 s, mitigado con un keep-alive cada 10 min |
+- Extracción con IA (`gpt-5-mini`, razonamiento `minimal`): p50 3,0 s, p95 4,5 s por informe; detalle en la sección de extracción.
 
-<!-- Agregar p50/p95 de la extracción con IA cuando entre #6. -->
-
-## 8. Datos sintéticos y privacidad
+## 9. Datos sintéticos y privacidad
 
 - Todos los pacientes, pólizas e informes del repositorio, de Notion y de la demo son **ficticios**.
 - La información de salud es un **dato sensible** según la **Ley 81 de 2019 de protección de datos personales de Panamá** (reglamentada por el Decreto Ejecutivo 285 de 2021). Por eso la demo pública muestra un aviso y no debe recibir datos reales.
 - Un uso real requeriría, como mínimo: consentimiento del titular, cifrado en tránsito y en reposo, control de acceso, registro de auditoría y un acuerdo de tratamiento con cada proveedor externo (Notion, OpenAI).
 - Los secretos (tokens de Notion y OpenAI) viven solo en variables de entorno de Render, nunca en el repositorio.
 
-## 9. Limitaciones y trabajo futuro
+## 10. Limitaciones y trabajo futuro
 - Matching de `procedimiento` es por string exacto → normalizar a códigos CPT/CIE o usar embeddings/LLM para informe libre.
 - Sin OCR/PDF: hoy `documentos` es checklist; integrar OCR para verificar contenido real.
 - Sin autenticación, auditoría HIPAA/GDPR ni reintentos: añadir log inmutable, cifrado y cola con retries.
