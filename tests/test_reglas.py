@@ -5,7 +5,7 @@ Los casos borde de reglas se agregan cuando cierren los issues de reglas (#3, #4
 """
 from datetime import date
 
-from agente_preauth import Decision, InformeMedico, Poliza, evaluar
+from preauth.reglas import Decision, InformeMedico, Poliza, evaluar
 
 HOY = date(2026, 9, 26)
 DOCS_COMPLETOS = [
