@@ -137,7 +137,7 @@ def test_autofill_pasa_confianza_a_informe(monkeypatch):
         pages = Pages()
 
     def fake_evaluar(pol, inf):
-        vistos["conf"] = inf.confianza
+        vistos["conf"] = inf.confianza_extraccion
         vistos["citas"] = inf.citas_no_encontradas
         return {"decision": type("D", (), {"value": "PREAPROBADA"})(),
                 "motivo": "ok", "faltantes": [], "autorizacion_id": "AUT-X"}
@@ -155,7 +155,7 @@ def test_autofill_pasa_confianza_a_informe(monkeypatch):
     assert vistos["conf"] == 0.3
     assert vistos["citas"] == ["analitica"]
     # sin autofill, defaults del dataclass
-    assert InformeMedico("P", "X", "K", "M").confianza == 1.0
+    assert InformeMedico("P", "X", "K", "M").confianza_extraccion == 1.0
 
 
 def test_autofill_evalua_con_los_datos_extraidos_del_texto(monkeypatch):
@@ -207,3 +207,47 @@ def test_get_text_lee_el_formato_de_lectura_y_el_de_escritura():
     escrito = {"x": {"title": [{"text": {"content": "P002"}}]}}
     assert nr.get_text(leido, "x") == "Dra. Lopez"
     assert nr.get_text(escrito, "x") == "P002"
+
+
+def test_confianza_cero_no_se_enmascara_y_manual_usa_defaults(monkeypatch):
+    """#33: ext con 0.0 llega como 0.0; sin ext (manual) van los defaults."""
+    vistos = []
+
+    class Pages:
+        def create(self, **kw):
+            return {"id": "res1"}
+
+        def update(self, **kw):
+            return {}
+
+    class DS:
+        def query(self, **kw):
+            f = kw.get("filter", {})
+            if f.get("property") == "estado":
+                return {"results": [{"id": "inf1", "properties": {}}], "has_more": False}
+            return {"results": [], "has_more": False}
+
+    class FakeClient:
+        data_sources = DS()
+        pages = Pages()
+
+    def fake_evaluar(pol, inf):
+        vistos.append((inf.confianza_extraccion, inf.citas_no_encontradas))
+        return {"decision": type("D", (), {"value": "PREAPROBADA"})(),
+                "motivo": "ok", "faltantes": [], "autorizacion_id": "AUT-X"}
+
+    monkeypatch.setattr(nr, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(nr, "data_sources_ids",
+                        lambda: {"informes": "a", "polizas": "b", "resoluciones": "c"})
+    monkeypatch.setattr(nr, "fetch_poliza", lambda pid, **k: (object(), "pol1"))
+    monkeypatch.setattr(nr, "evaluar", fake_evaluar)
+    monkeypatch.setattr(nr, "get_text", lambda pr, name: "P001" if "paciente" in name else "")
+
+    monkeypatch.setattr(nr, "_autofill",
+                        lambda *a, **k: {"confianza": 0.0, "citas_no_encontradas": []})
+    nr.run_once(autofill=True)
+    assert vistos[-1] == (0.0, [])
+
+    monkeypatch.setattr(nr, "_autofill", lambda *a, **k: None)
+    nr.run_once(autofill=True)
+    assert vistos[-1] == (1.0, [])

@@ -70,7 +70,7 @@ class InformeMedico:
     documentos_adjuntos: List[str] = field(default_factory=list)
     # docs requeridos base
     costo_estimado: float = 0
-    confianza: float = 1.0  # 0..1, la fija el extractor (6b: baja -> REVISION_MANUAL)
+    confianza_extraccion: float = 1.0  # 0..1, la fija el extractor (6b: <0.7 -> REVISION_MANUAL)
     citas_no_encontradas: List[str] = field(default_factory=list)
 
 DOCS_BASE = ["identificacion", "informe_medico", "consentimiento"]
