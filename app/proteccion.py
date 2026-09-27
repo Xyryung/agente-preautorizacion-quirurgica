@@ -25,6 +25,7 @@ from collections import defaultdict, deque
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
@@ -97,7 +98,48 @@ def requiere_admin(authorization: str | None = Header(default=None)) -> None:
         raise HTTPException(401, "Token de administrador invalido o ausente.")
 
 
+def _error_en_espanol(err: dict) -> str:
+    """Traduce un error de pydantic a español sin detalles internos."""
+    tipo = err.get("type", "")
+    ctx = err.get("ctx") or {}
+    campo = ".".join(str(p) for p in err.get("loc", []) if p != "body")
+    if tipo == "missing":
+        base = "falta este campo obligatorio"
+    elif tipo == "greater_than":
+        base = f"debe ser mayor que {ctx.get('gt')}"
+    elif tipo == "greater_than_equal":
+        base = f"debe ser mayor o igual que {ctx.get('ge')}"
+    elif tipo == "less_than":
+        base = f"debe ser menor que {ctx.get('lt')}"
+    elif tipo == "less_than_equal":
+        base = f"debe ser menor o igual que {ctx.get('le')}"
+    elif tipo in ("string_too_long", "too_long"):
+        base = "demasiado largo"
+    elif tipo in ("string_too_short", "too_short"):
+        base = "demasiado corto"
+    elif tipo == "literal_error":
+        base = "valor no permitido"
+    elif tipo == "date_parsing":
+        base = "fecha inválida (usa el formato AAAA-MM-DD)"
+    elif tipo == "finite_number":
+        base = "debe ser un número finito (sin NaN ni infinito)"
+    elif tipo == "json_invalid":
+        base = "cuerpo JSON inválido"
+    elif tipo == "value_error":
+        base = str(ctx.get("error", "dato inválido"))  # nuestros ValueError ya estan en español
+    else:
+        base = "dato inválido"
+    return f"{campo}: {base}" if campo else base
+
+
 def instalar(app: FastAPI) -> None:
+    @app.exception_handler(RequestValidationError)
+    async def validacion_en_espanol(request: Request, exc: RequestValidationError):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "; ".join(_error_en_espanol(e) for e in exc.errors())},
+        )
+
     @app.middleware("http")
     async def limitar(request: Request, call_next):
         largo = request.headers.get("content-length")
