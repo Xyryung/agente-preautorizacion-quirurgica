@@ -56,6 +56,7 @@ RES_MOTIVO = "motivo"
 RES_FALTANTES = "faltantes"
 RES_AUTORIZACION = "autorizacion_id"
 RES_TIMESTAMP = "timestamp"
+RES_INFORME = "informe"
 
 RESOLUCIONES_PROPS = {
     RES_PACIENTE_ID: "title",
@@ -64,6 +65,7 @@ RESOLUCIONES_PROPS = {
     RES_FALTANTES: "multi_select",
     RES_AUTORIZACION: "rich_text",
     RES_TIMESTAMP: "created_time",
+    RES_INFORME: "relation",
 }
 
 # --- Valores de estado / decisión (únicos permitidos) ---
