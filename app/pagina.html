@@ -140,6 +140,7 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
     DENEGADA: "Denegada",
   };
   const URGENCIAS = { programada: "Programada", emergencia: "Emergencia", no_indicada: "No indicada (se asume programada)" };
+  const COHERENCIA = { coherente: "Coherente", incoherente: "Incoherente", no_evaluable: "No evaluable" };
   const RESULTADOS = { cumple: "✔", no_cumple: "✖", faltan_documentos: "⚠", revision: "?", informativo: "ℹ" };
 
   for (const [id, p] of Object.entries(datos.polizas)) $("poliza").add(new Option(id + " — " + p.resumen, id));
@@ -228,6 +229,9 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
       filaTabla(tb, "Costo estimado", d.costo_estimado == null ? "—" : d.costo_estimado);
       filaTabla(tb, "Documentos aportados", d.documentos_aportados.join(", ") || "—");
       filaTabla(tb, "Documentos pendientes", d.documentos_pendientes.join(", ") || "—");
+      if (e.proveedor === "openai" && d.coherencia_diagnostico)
+        filaTabla(tb, "Diagnóstico vs. procedimiento", (COHERENCIA[d.coherencia_diagnostico] || d.coherencia_diagnostico) +
+          (d.justificacion_coherencia ? ": " + d.justificacion_coherencia : ""));
       filaTabla(tb, "Confianza", e.proveedor === "openai" ? Math.round(d.confianza * 100) + " %" : "— (sin IA)");
       $("extraccion-nota").textContent = e.respaldo
         ? "La IA no estuvo disponible: se usó el extractor de respaldo (reglas de texto)."

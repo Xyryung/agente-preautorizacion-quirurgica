@@ -67,11 +67,13 @@ def test_respaldo_de_la_ia_no_expone_el_error_interno():
     assert "sk-" not in r.text and "AuthenticationError" not in r.text
 
 
-def test_texto_libre_con_regex_real_preaprueba_el_caso_s01():
+def test_sin_ia_el_respaldo_con_regex_va_a_revision_manual():
+    # Decision de 6b: si nadie que entienda el lenguaje leyo el informe, lo revisa una persona.
     r = client.post("/api/evaluar", json={"poliza_id": "P001", "texto": TEXTO_S01})
     assert r.status_code == 200
-    assert r.json()["decision"] == "PREAPROBADA"
     assert r.json()["extraccion"]["proveedor"] == "regex"
+    assert r.json()["decision"] == "REVISION_MANUAL"
+    assert "confianza baja" in r.json()["motivo"]
 
 
 @pytest.mark.parametrize("caso", CASOS, ids=[c["id"] for c in CASOS])
@@ -84,15 +86,22 @@ def test_los_10_casos_sinteticos_se_evaluan_con_su_poliza_sugerida(caso):
 # --- Contrato de #6: extraccion -> InformeMedico ---
 
 def test_conversion_de_la_extraccion_sigue_el_contrato():
-    inf = api_evaluar.informe_desde_extraccion(
+    resultado = ResultadoExtraccion(
         datos_ia(urgencia="no_indicada", costo_estimado=None, cie10=None, medico=None,
-                 procedimiento="desconocido", documentos_aportados=["identificacion"]), "P009")
+                 procedimiento="desconocido", documentos_aportados=["identificacion"], confianza=0.6,
+                 coherencia_diagnostico="no_evaluable", justificacion_coherencia="Sin diagnóstico."),
+        "openai", 1.0, citas_no_encontradas=("cita inventada",))
+    inf = api_evaluar.informe_desde_extraccion(resultado, "P009")
     assert inf.paciente_id == "P009"
     assert inf.urgencia == "programada"
     assert inf.costo_estimado == 0
     assert inf.diagnostico_cie10 == "" and inf.medico == ""
     assert inf.procedimiento == "desconocido"
     assert inf.documentos_adjuntos == ["identificacion"]
+    assert inf.confianza_extraccion == 0.6
+    assert inf.citas_no_encontradas == ["cita inventada"]
+    assert inf.coherencia_diagnostico == "no_evaluable"
+    assert inf.justificacion_coherencia == "Sin diagnóstico."
 
 
 def test_procedimiento_desconocido_va_a_revision_manual():
@@ -214,3 +223,45 @@ def test_pagina_trae_los_campos_para_personalizar_la_poliza():
     # Los campos se pueden enviar tal cual como poliza personalizada
     r = client.post("/api/evaluar", json={"poliza": p002, "informe": {"procedimiento": "Cataratas", "costo_estimado": 3000}})
     assert r.status_code == 200
+
+
+# --- #40: senales de la extraccion (6b y #7) aplicadas en la web ---
+
+def test_confianza_baja_de_la_ia_va_a_revision_manual():
+    usar_extractor(ResultadoExtraccion(datos_ia(confianza=0.5), "openai", 1.0))
+    r = client.post("/api/evaluar", json={"poliza_id": "P001", "texto": TEXTO_S01}).json()
+    assert r["decision"] == "REVISION_MANUAL"
+    assert "confianza baja" in r["motivo"]
+    assert "extraccion" in {h["regla"] for h in r["hallazgos"]}
+
+
+def test_citas_inventadas_por_la_ia_van_a_revision_manual():
+    usar_extractor(ResultadoExtraccion(datos_ia(), "openai", 1.0,
+                                       citas_no_encontradas=("adjunta ecografia renal",)))
+    r = client.post("/api/evaluar", json={"poliza_id": "P001", "texto": TEXTO_S01}).json()
+    assert r["decision"] == "REVISION_MANUAL"
+    assert "adjunta ecografia renal" in r["motivo"]
+
+
+def test_diagnostico_incoherente_segun_la_ia_va_a_revision_con_la_justificacion():
+    justificacion = "K80.2 no justifica una colecistectomía de urgencia en este contexto."
+    usar_extractor(ResultadoExtraccion(
+        datos_ia(coherencia_diagnostico="incoherente", justificacion_coherencia=justificacion), "openai", 1.0))
+    r = client.post("/api/evaluar", json={"poliza_id": "P001", "texto": TEXTO_S01}).json()
+    assert r["decision"] == "REVISION_MANUAL"
+    assert justificacion in r["motivo"]
+
+
+def test_extraccion_correcta_de_la_ia_sigue_preaprobando():
+    usar_extractor(ResultadoExtraccion(datos_ia(), "openai", 1.0))
+    r = client.post("/api/evaluar", json={"poliza_id": "P001", "texto": TEXTO_S01}).json()
+    assert r["decision"] == "PREAPROBADA"
+    assert r["extraccion"]["datos"]["coherencia_diagnostico"] == "coherente"
+
+
+def test_informe_estructurado_no_aplica_senales_de_extraccion():
+    r = client.post("/api/evaluar", json={"poliza_id": "P001", "informe": {
+        "procedimiento": "Colecistectomía", "diagnostico_cie10": "K80.2", "costo_estimado": 8000,
+        "documentos_adjuntos": ["identificacion", "informe_medico", "consentimiento",
+                                "ecografia_abdominal", "analitica"]}}).json()
+    assert r["decision"] == "PREAPROBADA"
