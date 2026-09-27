@@ -73,6 +73,9 @@ class InformeMedico:
     # Senales de la extraccion automatica (issue #6b). None/vacio: no hubo extraccion.
     confianza_extraccion: float | None = None
     citas_no_encontradas: List[str] = field(default_factory=list)
+    # Coherencia diagnostico-procedimiento segun la IA (issue #7). None: no hubo extraccion.
+    coherencia_diagnostico: str | None = None
+    justificacion_coherencia: str = ""
 
 DOCS_BASE = ["identificacion", "informe_medico", "consentimiento"]
 DOCS_POR_PROCEDIMIENTO = {
@@ -143,6 +146,10 @@ def _regla_extraccion(informe: InformeMedico) -> List[Hallazgo]:
         return [Hallazgo("extraccion", Resultado.REVISION,
                          "La extracción automática requiere revisión manual: "
                          + "; ".join(razones) + ".")]
+    return []
+
+def _regla_coherencia(informe: InformeMedico) -> List[Hallazgo]:
+    """Se implementa en el siguiente commit (issue #7)."""
     return []
 
 def _poliza_vigente(poliza: Poliza, hoy: date) -> bool:

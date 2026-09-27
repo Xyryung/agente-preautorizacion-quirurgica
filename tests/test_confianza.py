@@ -38,6 +38,7 @@ def extraccion(evidencia) -> ExtraccionInforme:
     return ExtraccionInforme(
         procedimiento="Colecistectomía", cie10=None, urgencia="programada", costo_estimado=8000.0,
         paciente_id=None, medico=None, documentos_aportados=[], documentos_pendientes=[],
+        coherencia_diagnostico="coherente", justificacion_coherencia="",
         evidencia=evidencia, confianza=0.9)
 
 

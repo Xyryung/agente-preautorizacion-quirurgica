@@ -39,12 +39,14 @@ DOC_KEYWORDS = {"identificacion": ["dni", "identificacion", "cedula"], "informe_
 MAX_CARACTERES = 8000   # los informes mas largos se recortan antes de enviarlos
 DESCONOCIDO = "desconocido"
 NO_INDICADA = "no_indicada"
+NO_EVALUABLE = "no_evaluable"
 DOCUMENTOS_CONOCIDOS = list(DOC_KEYWORDS)
 
 # Los Literal se construyen desde las listas de arriba: una sola fuente de verdad.
 Procedimiento = Literal[tuple(PROCEDIMIENTOS_CONOCIDOS + [DESCONOCIDO])]
 Documento = Literal[tuple(DOCUMENTOS_CONOCIDOS)]
 Urgencia = Literal["emergencia", "programada", NO_INDICADA]
+Coherencia = Literal["coherente", "incoherente", NO_EVALUABLE]
 
 
 class Evidencia(BaseModel):
@@ -62,6 +64,8 @@ class ExtraccionInforme(BaseModel):
     medico: str | None
     documentos_aportados: list[Documento]
     documentos_pendientes: list[Documento]
+    coherencia_diagnostico: Coherencia   # ¿el diagnostico justifica el procedimiento? (issue #7)
+    justificacion_coherencia: str        # una frase breve que explica el veredicto
     evidencia: list[Evidencia]
     confianza: float
 
@@ -146,6 +150,8 @@ def _extraer_con_regex(texto: str) -> ExtraccionInforme:
         medico=c["medico"] or None,
         documentos_aportados=c["documentos"],  # sin IA no se distingue aportado de mencionado
         documentos_pendientes=[],
+        coherencia_diagnostico=NO_EVALUABLE,  # sin IA no se juzga la coherencia clinica
+        justificacion_coherencia="Sin IA no se evalua la coherencia.",
         evidencia=[],
         confianza=0.0,                    # sin autoevaluacion
     )

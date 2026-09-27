@@ -21,6 +21,7 @@ def extraccion(**cambios) -> ExtraccionInforme:
         procedimiento="Colecistectomía", cie10="K80.2", urgencia="programada",
         costo_estimado=8000.0, paciente_id="P001", medico="Dra. Ríos",
         documentos_aportados=["analitica"], documentos_pendientes=["ecografia_abdominal"],
+        coherencia_diagnostico="coherente", justificacion_coherencia="K80.2 justifica la colecistectomía.",
         evidencia=[{"campo": "procedimiento", "cita": "Colecistectomía programada"}],
         confianza=0.9,
     )
