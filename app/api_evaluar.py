@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app import proteccion, webhook_notion
 from app.casos_demo import POLIZAS_DEMO
-from preauth.extraccion import DESCONOCIDO, NO_INDICADA, ExtraccionInforme, extraer
+from preauth.extraccion import NO_INDICADA, ExtraccionInforme, ResultadoExtraccion, extraer
 from preauth.reglas import InformeMedico, Poliza, evaluar
 
 log = logging.getLogger("preauth.api")
@@ -121,8 +121,14 @@ def obtener_extractor():
     return extraer
 
 
-def informe_desde_extraccion(datos: ExtraccionInforme, paciente_id: str) -> InformeMedico:
-    """Contrato de #6: convierte lo que extrae la IA en la entrada de las reglas."""
+def informe_desde_extraccion(r: ResultadoExtraccion, paciente_id: str) -> InformeMedico:
+    """Contrato de #6: convierte lo que extrae la IA en la entrada de las reglas.
+
+    Incluye las senales de la extraccion (6b y #7): con confianza baja, citas que
+    no estan en el informe o un diagnostico incoherente, las reglas mandan el caso
+    a revision manual (#40).
+    """
+    datos = r.datos
     return InformeMedico(
         paciente_id=paciente_id,
         procedimiento=datos.procedimiento,  # "desconocido" va a revision manual
@@ -131,6 +137,10 @@ def informe_desde_extraccion(datos: ExtraccionInforme, paciente_id: str) -> Info
         urgencia="programada" if datos.urgencia == NO_INDICADA else datos.urgencia,
         documentos_adjuntos=list(datos.documentos_aportados),
         costo_estimado=datos.costo_estimado or 0,  # sin costo, la regla de monto pide presupuesto
+        confianza_extraccion=datos.confianza,
+        citas_no_encontradas=list(r.citas_no_encontradas),
+        coherencia_diagnostico=datos.coherencia_diagnostico,
+        justificacion_coherencia=datos.justificacion_coherencia,
     )
 
 
@@ -160,7 +170,7 @@ def api_evaluar(solicitud: SolicitudEvaluar, extractor=Depends(obtener_extractor
             proveedor=r.proveedor, respaldo=r.error is not None, confianza=r.datos.confianza,
             datos=r.datos, advertencias=list(r.advertencias),
         )
-        informe = informe_desde_extraccion(r.datos, poliza_id)
+        informe = informe_desde_extraccion(r, poliza_id)
     else:
         informe = InformeMedico(paciente_id=poliza_id, **solicitud.informe.model_dump())
     fin_extraccion = time.perf_counter()
