@@ -70,7 +70,8 @@ class InformeMedico:
     documentos_adjuntos: List[str] = field(default_factory=list)
     # docs requeridos base
     costo_estimado: float = 0
-    confianza_extraccion: float = 1.0  # 0..1, la fija el extractor (6b: <0.7 -> REVISION_MANUAL)
+    # Senales de la extraccion automatica (issue #6b). None/vacio: no hubo extraccion.
+    confianza_extraccion: float | None = None
     citas_no_encontradas: List[str] = field(default_factory=list)
 
 DOCS_BASE = ["identificacion", "informe_medico", "consentimiento"]
@@ -108,6 +109,9 @@ def meses_afiliado(poliza: Poliza, hoy: date) -> int:
     return max(meses, 0)
 
 PROCEDIMIENTOS_SIN_DATO = {"", "desconocido"}
+# Red de seguridad, no calibracion: en 10 informes sinteticos los casos normales
+# dieron >= 0.90 y el informe vacio 0.60 (ver README).
+UMBRAL_CONFIANZA = 0.7
 MOTIVO_PREAPROBADA = "Cumple cobertura, carencia y documentación. Pre-aprobación emitida."
 
 # Que hallazgos explican cada decision en el campo 'motivo'.
@@ -124,6 +128,21 @@ def _regla_datos(informe: InformeMedico) -> List[Hallazgo]:
     if norm(informe.procedimiento) in PROCEDIMIENTOS_SIN_DATO:
         return [Hallazgo("datos", Resultado.REVISION,
                          "El informe no indica un procedimiento reconocible; requiere revisión manual.")]
+    return []
+
+def _regla_extraccion(informe: InformeMedico) -> List[Hallazgo]:
+    """Senales de la extraccion automatica. Como maximo un hallazgo (ver issue #6b)."""
+    razones = []
+    c = informe.confianza_extraccion
+    if c is not None and c < UMBRAL_CONFIANZA:
+        razones.append(f"confianza baja ({c:.2f} < {UMBRAL_CONFIANZA:.2f})")
+    if informe.citas_no_encontradas:
+        citas = "; ".join(f"'{x}'" for x in informe.citas_no_encontradas[:3])
+        razones.append(f"citas que no aparecen en el informe: {citas}")
+    if razones:
+        return [Hallazgo("extraccion", Resultado.REVISION,
+                         "La extracción automática requiere revisión manual: "
+                         + "; ".join(razones) + ".")]
     return []
 
 def _poliza_vigente(poliza: Poliza, hoy: date) -> bool:
@@ -210,6 +229,7 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date | None = None) -> 
     faltantes = _documentos_faltantes(poliza, informe)
     hallazgos = (
         _regla_datos(informe)
+        + _regla_extraccion(informe)
         + _regla_vigencia(poliza, hoy)
         + _regla_cobertura(poliza, informe)
         + _regla_carencia(poliza, informe, hoy)

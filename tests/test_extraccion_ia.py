@@ -149,6 +149,7 @@ def test_texto_demasiado_largo_se_recorta_con_advertencia():
 
 def test_compatibilidad_mantiene_las_claves_del_diccionario():
     d = extraer_desde_texto(TEXTO)
+    # Claves de siempre + las dos de #6b (confianza y citas no encontradas).
     assert set(d) == {"procedimiento", "cie", "documentos", "urgencia",
                       "paciente_id", "medico", "costo",
                       "confianza", "citas_no_encontradas"}
@@ -168,3 +169,12 @@ def test_compatibilidad_deja_vacios_los_valores_sin_dato():
     d = extraer_desde_texto("Paciente P009. Se envía documentación.")
     assert d["procedimiento"] == ""
     assert d["urgencia"] == ""
+
+def test_citas_no_encontradas_no_son_documentos_faltantes():
+    # Todas las citas estan en el texto; faltan documentos requeridos.
+    # 'citas_no_encontradas' debe quedar vacio: los faltantes los calcula reglas.py.
+    salida = extraccion(evidencia=[{"campo": "procedimiento", "cita": "Colecistectomía programada"}],
+                        documentos_aportados=["analitica"])
+    d = extraer_desde_texto(TEXTO, proveedor="openai", cliente=ClienteFalso(salida=salida))
+    assert d["citas_no_encontradas"] == []
+    
