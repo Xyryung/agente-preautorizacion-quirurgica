@@ -19,38 +19,50 @@
 4. La documentación interactiva de la API está en [`/docs`](https://agente-preautorizacion.onrender.com/docs).
 
 ## 1. Resumen ejecutivo
-Sistema que elimina la espera de horas/días en la autorización de cirugías. Recibe el **informe médico digital (Hospital)** y la **póliza (Aseguradora)** desde **Notion**, los cruza con reglas de negocio y emite en segundos: `PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES` o `DENEGADA`.
+Sistema que elimina la espera de horas/días en la autorización de cirugías. Recibe el **informe médico digital (Hospital)** y la **póliza (Aseguradora)** en una base de datos de **Notion**. La **IA lee el informe en texto libre** y extrae procedimiento, diagnóstico, urgencia, costo y documentos; las **reglas de la póliza deciden** cobertura, carencia, monto y documentación, y emiten en segundos: `PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES`, `REVISION_MANUAL` o `DENEGADA`, con el motivo de cada regla.
 
 **Objetivo:** pasar de un proceso manual (24-72h) a uno automático (<10s por caso).
 
 ## 2. Arquitectura
 
 ```
-┌──────────────┐      ┌──────────────┐
-│ Hospital     │      │ Aseguradora  │
-│ (informe)    │      │ (póliza)     │
-└──────┬───────┘      └──────┬───────┘
-       │                     │
-       ▼                     ▼
-┌────────────────────────────────────┐
-│ Notion DB                          │
-│ - Informes_Hospital (estado)       │
-│ - Pólizas_Aseguradora              │
-│ - Resoluciones                     │
-└──────────────┬─────────────────────┘
-               │ polling 60s / webhook
-               ▼
-┌────────────────────────────────────┐
-│ Agente Python (preauth/reglas.py)  │
-│ 1. Cobertura  2. Carencia          │
-│ 3. Monto      4. Documentos        │
-└──────────────┬─────────────────────┘
-               ▼
-┌────────────────────────────────────┐
-│ Respuesta en Notion + notificación │
-│ AUT-ID, motivo, faltantes          │
-└────────────────────────────────────┘
+   Hospital: informe médico          Aseguradora: póliza
+             │                                │
+             ▼                                ▼
+┌──────────────────────────────────────────────────────────┐
+│ Notion                                                   │
+│   Informes_Hospital  (estado: pendiente → procesado)     │
+│   Pólizas_Aseguradora             Resoluciones           │
+└────────────┬────────────────────────────────▲────────────┘
+             │ webhook firmado (HMAC-SHA256)  │ resolución, estado
+             ▼                                │ y monto reservado
+┌─────────────────────────────────────────────┴────────────┐
+│ Servicio en Render (FastAPI)                             │
+│                                                          │
+│   POST /webhook/notion         Página /  y               │
+│   (flujo Notion)               POST /api/evaluar (demo)  │
+│             │                          │                 │
+│             └────────────┬─────────────┘                 │
+│                          ▼                               │
+│   1. Extracción con IA   OpenAI, salida estructurada     │
+│      preauth/extraccion.py   (respaldo: regex)           │
+│   2. Decisión con reglas deterministas                   │
+│      preauth/reglas.py   vigencia · cobertura · carencia │
+│                          monto · documentos · extracción │
+└──────────────────────────────────────────────────────────┘
 ```
+
+**Dos entradas, el mismo agente:**
+
+- **Notion (flujo del reto):** cuando un informe pasa a `pendiente`, Notion avisa al webhook; el agente lee el informe, cruza la póliza, decide, escribe la resolución en `Resoluciones`, cambia el estado a `procesado` y reserva el monto. Sin intervención humana.
+- **Página web y API (para probar):** el mismo extractor y las mismas reglas, con pólizas de demo en memoria. Probar la demo no escribe en Notion.
+
+**Por qué la IA extrae y las reglas deciden:**
+
+- **Explicable y auditable:** cada decisión sale de reglas escritas en código, con un hallazgo por regla; la IA aporta citas (`evidencia`) de dónde sacó cada dato.
+- **Predecible:** el mismo informe y la misma póliza dan siempre la misma decisión; un modelo de lenguaje no lo garantiza.
+- **Seguro ante errores de la IA:** si la IA falla o duda (confianza baja, citas que no están en el texto), el caso va a `REVISION_MANUAL`, nunca a una aprobación.
+- **La IA hace lo que las reglas no pueden:** entender lenguaje natural, por ejemplo "no se trata de una emergencia" o "ingresa por urgencias", que decide si se aplica la carencia.
 
 ## 3. Modelo de datos en Notion
 
@@ -193,18 +205,9 @@ cp .env.example .env
 
 El despliegue en Render (configuración, tiempos medidos y keep-alive) está documentado en [`docs/despliegue.md`](docs/despliegue.md).
 
-### Integración Notion (pseudocódigo listo)
-```python
-from notion_client import Client
-import os
-notion = Client(auth=os.environ["NOTION_TOKEN"])
-# 1. Leer pendientes
-resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
-    filter={"property": "estado", "select": {"equals": "pendiente"}})
-# 2. Por cada página: mapear a Poliza/InformeMedico -> evaluar() ->
-#    notion.pages.create(db_resoluciones, properties={...}) +
-#    notion.pages.update(page_id, properties={"estado": "procesado"})
-```
+### Flujo con Notion
+
+Con las variables `NOTION_*` y `NOTION_WEBHOOK_VERIFICATION_TOKEN` en Render y la suscripción creada en la integración de Notion, cada informe que pasa a `pendiente` se procesa solo. La configuración paso a paso y la prueba de punta a punta están en [`docs/webhook-notion.md`](docs/webhook-notion.md).
 
 ## 7. Ejemplos
 
@@ -225,8 +228,12 @@ Medido con `curl` desde Panamá contra el servicio en Render (detalle en [`docs/
 |---|---|
 | Servicio despierto, n = 20 | p50 **0,28 s** · p95 **0,36 s** |
 | Motor de reglas (dentro del servidor) | < 0,05 ms por caso |
-| Arranque en frío (plan gratuito, tras 15 min sin tráfico) | 32,6 s, mitigado con un keep-alive cada 10 min |
-- Extracción con IA (`gpt-5-mini`, razonamiento `minimal`): p50 3,0 s, p95 4,5 s por informe; detalle en la sección de extracción.
+| Arranque en frío (plan gratuito, tras 15 min sin tráfico) | 32,6 s, evitado con un monitor externo (UptimeRobot) que consulta `/health` cada 5 min |
+| Extracción con IA (`gpt-5-mini`, razonamiento `minimal`), 10 informes | p50 **3,0 s** · p95 **4,5 s** (ver sección 5) |
+| Evaluación completa con IA (extracción + reglas), en local | 3,2–3,4 s por informe; la primera llamada 5,1 s |
+| Notion: informe en `pendiente` → resolución escrita, en producción | 16–64 s (4 pruebas); casi todo es la espera del webhook, porque Notion agrupa los eventos de páginas antes de enviarlos |
+
+**Prueba de punta a punta en producción:** un informe de P003 escrito solo en texto ("llega al cuarto de urgencias… apendicectomía de emergencia"), con una póliza que no cumplía la carencia (5 de 8 meses). La IA detectó la emergencia, el agente omitió la carencia y escribió en Notion `PREAPROBADA` (`AUT-P003-20260927`) en ~64 s, sin intervención humana. Con el extractor sin IA ese mismo informe se habría denegado por carencia.
 
 ## 9. Datos sintéticos y privacidad
 
@@ -236,20 +243,30 @@ Medido con `curl` desde Panamá contra el servicio en Render (detalle en [`docs/
 - Los secretos (tokens de Notion y OpenAI) viven solo en variables de entorno de Render, nunca en el repositorio.
 
 ## 10. Limitaciones y trabajo futuro
-- Matching de `procedimiento` es por string exacto → normalizar a códigos CPT/CIE o usar embeddings/LLM para informe libre.
-- Sin OCR/PDF: hoy `documentos` es checklist; integrar OCR para verificar contenido real.
-- Sin autenticación, auditoría HIPAA/GDPR ni reintentos: añadir log inmutable, cifrado y cola con retries.
-- **Plan gratuito de Render:** 0,1 CPU y 512 MB; el servicio se duerme tras 15 min sin tráfico (keep-alive con GitHub Actions, que puede retrasarse unos minutos) y el disco es efímero, por eso el estado vive en Notion.
-- **Despliegue manual:** Render no despliega solo al hacer merge a `main`; hay que usar *Manual Deploy* (el CI ya puede llamar a un Deploy Hook si se configura el secret).
-- **Protección de la demo:** el límite de solicitudes por IP vive en memoria, así que se reinicia con cada deploy y solo sirve para una instancia.
-- Evolución IA: usar LLM solo para extraer `procedimiento/CIE/documentos` del informe en lenguaje natural, manteniendo las 4 reglas deterministas para la decisión (explicable y auditable).
+
+**De la IA**
+- La IA puede interpretar mal una frase real sin que ninguna señal lo detecte (caso S10 de la sección 5): la confianza y las citas cubren datos faltantes o inventados, no malas interpretaciones.
+- Precisión medida con solo 10 informes sintéticos y una ejecución por configuración.
+- No verifica el contenido de los documentos: `documentos` es la lista de lo que el informe dice que se adjunta (trabajo futuro: OCR y verificación con IA, #16).
+- La coherencia entre diagnóstico CIE-10 y procedimiento aún no se verifica (#7).
+
+**Del flujo con Notion**
+- El webhook tarda entre 15 y 65 s porque Notion agrupa los eventos: es automático, no instantáneo al segundo.
+- Una fila creada a mano nace en `pendiente` y se procesa de inmediato: hay que llenarla antes de cambiar el estado (mejora: un estado `borrador` por defecto).
+- Los ids de eventos ya procesados y el límite por IP viven en memoria: se olvidan con cada deploy y solo sirven para una instancia.
+
+**De la infraestructura de la demo**
+- **Plan gratuito de Render:** 0,1 CPU y 512 MB, disco efímero (el estado vive en Notion). El servicio se dormiría tras 15 min sin tráfico; lo mantiene despierto un monitor externo. El keep-alive con GitHub Actions del repositorio no llegó a ejecutarse porque GitHub no disparó el cron programado.
+- **Despliegue manual:** Render no despliega solo al hacer merge a `main`; hay que usar *Manual Deploy* (el CI puede llamar a un Deploy Hook si se configura el secret).
+- **Sin cuentas de usuario:** la demo es pública con límite por IP; los endpoints que escriben en Notion exigen un token de administrador.
+- **Uso real:** requeriría base legal para datos reales (Ley 81 de 2019), auditoría inmutable y acuerdos con los proveedores (ver sección 9).
 
 ## Herramientas de IA utilizadas
 
 ### En el producto
 | Herramienta | Uso |
 |---|---|
-| OpenAI API (modelo configurado en OPENAI_MODEL) | Extracción estructurada del informe médico y verificación de coherencia diagnóstico-procedimiento. La IA extrae; las reglas deterministas deciden. |
+| OpenAI API (`gpt-5-mini`, configurable con `OPENAI_MODEL`) | Extracción estructurada del informe médico en texto libre: procedimiento, CIE-10, urgencia, costo, documentos, evidencia y confianza. La IA extrae; las reglas deterministas deciden. |
 
 ### En el desarrollo
 | Herramienta | Uso | Cómo se verificó |
