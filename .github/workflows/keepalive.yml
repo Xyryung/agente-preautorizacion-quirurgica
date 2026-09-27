@@ -1,0 +1,25 @@
+name: Mantener despierta la demo
+
+# El plan gratuito de Render duerme el servicio tras 15 min sin trafico.
+# Este workflow hace ping a /health cada 10 min para que la demo responda
+# rapido cuando la evaluen. Esta encendido por defecto; para apagarlo, crear
+# la variable del repositorio KEEPALIVE = off (Settings > Secrets and
+# variables > Actions > Variables).
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    if: vars.KEEPALIVE != 'off' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping a /health
+        run: |
+          curl -fsS --max-time 120 --retry 2 -o /dev/null \
+            -w "HTTP %{http_code} en %{time_total}s\n" \
+            https://agente-preautorizacion.onrender.com/health
