@@ -1,9 +1,10 @@
 name: Mantener despierta la demo
 
 # El plan gratuito de Render duerme el servicio tras 15 min sin trafico.
-# Este workflow hace ping a /health cada 10 min, solo mientras la variable
-# del repositorio KEEPALIVE valga "on" (Settings > Secrets and variables >
-# Actions > Variables). Activarla antes de la evaluacion y apagarla despues.
+# Este workflow hace ping a /health cada 10 min para que la demo responda
+# rapido cuando la evaluen. Esta encendido por defecto; para apagarlo, crear
+# la variable del repositorio KEEPALIVE = off (Settings > Secrets and
+# variables > Actions > Variables).
 on:
   schedule:
     - cron: "*/10 * * * *"
@@ -13,7 +14,7 @@ permissions: {}
 
 jobs:
   ping:
-    if: vars.KEEPALIVE == 'on' || github.event_name == 'workflow_dispatch'
+    if: vars.KEEPALIVE != 'off' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -51,11 +51,13 @@ En caliente, casi todo el tiempo es red. El motor de reglas es instantáneo.
 El plan gratuito duerme el servicio tras 15 min sin tráfico, y el primer visitante esperaría ~33 s.
 
 - **Keep-alive con GitHub Actions:** [`keepalive.yml`](../.github/workflows/keepalive.yml)
-  hace ping a `/health` cada 10 min mientras la variable del repositorio `KEEPALIVE` valga `on`
-  (Settings → Secrets and variables → Actions → Variables). Encenderla antes de la evaluación
-  y apagarla después. Nota: GitHub puede retrasar los cron varios minutos en horas de alta carga.
+  hace ping a `/health` cada 10 min. Está **encendido siempre**, porque no sabemos cuándo se evalúa.
+  Para apagarlo, crear la variable del repositorio `KEEPALIVE` = `off`
+  (Settings → Secrets and variables → Actions → Variables). El ping no usa OpenAI ni Notion,
+  así que no genera costos. Nota: GitHub puede retrasar los cron varios minutos en horas de
+  alta carga y desactiva los workflows programados tras 60 días sin actividad en el repositorio.
 - **Respaldo:** un monitor externo gratuito (por ejemplo UptimeRobot, cada 5 min) sobre `/health`.
-- **Justo antes de presentar:** abrir el enlace una vez para despertarlo.
+- **Justo antes de presentar (si se presenta en vivo):** abrir el enlace una vez para despertarlo.
 
 Un servicio despierto 24/7 consume ~720 h al mes, dentro de las 750 h gratuitas de Render
 por workspace. Por eso conviene tener un solo servicio gratuito activo.
