@@ -211,7 +211,11 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
     $("hallazgos").replaceChildren();
     for (const h of r.hallazgos) item($("hallazgos"), (RESULTADOS[h.resultado] || "") + " " + h.regla + ": " + h.mensaje, "r-" + h.resultado);
     $("faltantes").replaceChildren();
-    if (r.faltantes.length) r.faltantes.forEach((f) => item($("faltantes"), f)); else item($("faltantes"), "Ninguno");
+    if (r.faltantes.length) r.faltantes.forEach((f) => item($("faltantes"), f));
+    else if (r.decision === "DENEGADA")
+      // Las reglas no piden documentos en una denegacion: entregarlos no cambiaria la decision.
+      item($("faltantes"), "No se solicitan documentos porque la solicitud fue denegada: entregarlos no cambiaría la decisión.");
+    else item($("faltantes"), "Ninguno");
     const tb = $("extraccion"); tb.replaceChildren();
     const e = r.extraccion;
     if (e) {
