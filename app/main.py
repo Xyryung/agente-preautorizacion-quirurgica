@@ -2,6 +2,7 @@
 
 - /                         pagina para probar el agente con casos o informes propios (#9)
 - POST /api/evaluar         evalua un informe (texto libre o estructurado) contra una poliza (#9)
+- POST /api/guardar-informe guarda el informe en Notion como pendiente (#34)
 - POST /webhook/notion      dispara el agente cuando cambia Notion (#12)
 - /health                   health check de Render
 
@@ -16,7 +17,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from app import api_evaluar, proteccion, webhook_notion
+from app import api_evaluar, api_guardar, proteccion, webhook_notion
 from app.casos_demo import CASOS, POLIZAS_DEMO
 from preauth.reglas import InformeMedico, Poliza, evaluar
 
@@ -28,6 +29,7 @@ app = FastAPI(
 )
 proteccion.instalar(app)
 app.include_router(api_evaluar.router)
+app.include_router(api_guardar.router)
 app.include_router(webhook_notion.router)
 
 POLIZA_DEMO = Poliza("P001", ["Colecistectomía"], date(2024, 1, 1), {"default": 8}, 50000, 5000)

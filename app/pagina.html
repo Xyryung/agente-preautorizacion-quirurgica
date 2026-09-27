@@ -98,6 +98,7 @@ informe y las reglas de la póliza deciden: preaprobación, solicitud de documen
     placeholder="Ej.: Paciente P001. Colelitiasis (K80.2). Colecistectomía programada. Se adjuntan cédula, informe médico, consentimiento, ecografía abdominal y analítica. Presupuesto: 8000."></textarea>
   <div class="ayuda"><span id="contador">0</span> / 8000 caracteres</div>
   <button type="submit" id="evaluar">Evaluar</button>
+  <button type="button" id="guardar" title="Crea una fila pendiente en Notion (pide token de administrador)">Guardar en Notion</button>
 </form>
 
 <section id="resultado" class="panel oculto" aria-live="polite">
@@ -237,6 +238,43 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
     $("latencia").textContent = "Tiempo: " + (l.total_ms / 1000).toFixed(2) + " s (extracción " +
       (l.extraccion_ms / 1000).toFixed(2) + " s, reglas " + l.reglas_ms + " ms).";
   }
+
+  $("guardar").addEventListener("click", async () => {
+    const texto = $("texto").value.trim();
+    if (!texto) return;
+    let token = sessionStorage.getItem("admin_token") || "";
+    if (!token) {
+      token = (window.prompt("Token de administrador para guardar en Notion:") || "").trim();
+      if (!token) return;
+      sessionStorage.setItem("admin_token", token);
+    }
+    $("guardar").disabled = true; $("guardar").textContent = "Guardando…";
+    try {
+      const resp = await fetch("/api/guardar-informe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ texto }),
+      });
+      const cuerpo = await resp.json().catch(() => ({}));
+      if (resp.status === 401) {
+        sessionStorage.removeItem("admin_token");
+        throw new Error("Token inválido. Intenta de nuevo.");
+      }
+      if (!resp.ok) throw new Error(typeof cuerpo.detail === "string"
+        ? cuerpo.detail : "No se pudo guardar (" + resp.status + ").");
+      $("error").classList.add("oculto");
+      alert("Guardado en Notion como pendiente. El agente lo procesará en el siguiente ciclo.");
+    } catch (err) {
+      $("resultado").classList.remove("oculto");
+      $("contenido").classList.add("oculto");
+      $("error").textContent = err instanceof TypeError
+        ? "No se pudo conectar con el servidor."
+        : (err.message || "No se pudo guardar el informe.");
+      $("error").classList.remove("oculto");
+    } finally {
+      $("guardar").disabled = false; $("guardar").textContent = "Guardar en Notion";
+    }
+  });
 
   $("formulario").addEventListener("submit", async (ev) => {
     ev.preventDefault();
