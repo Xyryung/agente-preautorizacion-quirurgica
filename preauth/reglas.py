@@ -11,7 +11,41 @@ from preauth.texto import norm
 class Decision(str, Enum):
     PREAPROBADA = "PREAPROBADA"
     DOCUMENTOS_FALTANTES = "SOLICITUD_DOCUMENTOS_FALTANTES"
+    REVISION_MANUAL = "REVISION_MANUAL"
     DENEGADA = "DENEGADA"
+
+
+class Resultado(str, Enum):
+    """Resultado de UNA regla. La decision final se deriva de todos (ver decidir())."""
+    CUMPLE = "cumple"
+    INFORMATIVO = "informativo"          # no cambia la decision; se muestra en el motivo
+    FALTAN_DOCUMENTOS = "faltan_documentos"
+    REVISION = "revision"
+    NO_CUMPLE = "no_cumple"
+
+
+@dataclass(frozen=True)
+class Hallazgo:
+    regla: str            # "datos", "cobertura", "carencia", "monto", "documentos"
+    resultado: Resultado
+    mensaje: str
+
+
+# De mayor a menor prioridad: el primer resultado presente define la decision.
+PRECEDENCIA = [
+    (Resultado.NO_CUMPLE, Decision.DENEGADA),
+    (Resultado.REVISION, Decision.REVISION_MANUAL),
+    (Resultado.FALTAN_DOCUMENTOS, Decision.DOCUMENTOS_FALTANTES),
+]
+
+
+def decidir(hallazgos: List[Hallazgo]) -> Decision:
+    """DENEGADA > REVISION_MANUAL > DOCUMENTOS_FALTANTES > PREAPROBADA."""
+    presentes = {h.resultado for h in hallazgos}
+    for resultado, decision in PRECEDENCIA:
+        if resultado in presentes:
+            return decision
+    return Decision.PREAPROBADA
 
 @dataclass
 class Poliza:
