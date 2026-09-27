@@ -8,8 +8,8 @@
 
 ## Pruébalo en 2 minutos
 
-1. Abre https://agente-preautorizacion.onrender.com. Si nadie la usó en un rato, la primera carga puede tardar ~30 s mientras el servidor gratuito despierta.
-2. Elige uno de los **10 casos de ejemplo** (se selecciona sola la póliza adecuada) o **pega tu propio informe** en texto libre y elige una de las 4 pólizas de demo.
+1. Abre https://agente-preautorizacion.onrender.com.
+2. Elige uno de los **10 casos de ejemplo** (se selecciona sola la póliza adecuada) o **pega tu propio informe** en texto libre y elige una de las 4 pólizas de demo (o ábrela en **Personalizar póliza** y cambia cobertura, carencias o montos).
 3. Presiona **Evaluar**. Verás la **decisión** (`PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES`, `REVISION_MANUAL` o `DENEGADA`), el resultado de **cada regla**, los **documentos faltantes**, los **datos que extrajo la IA** y el **tiempo de respuesta**.
 
 | Póliza de demo | Escenario |
@@ -233,7 +233,7 @@ Medido con `curl` desde Panamá contra el servicio en Render (detalle en [`docs/
 | Motor de reglas (dentro del servidor) | < 0,05 ms por caso |
 | Arranque en frío (plan gratuito, tras 15 min sin tráfico) | 32,6 s, evitado con un monitor externo (UptimeRobot) que consulta `/health` cada 5 min |
 | Extracción con IA (`gpt-5-mini`, razonamiento `minimal`), 10 informes | p50 **3,0 s** · p95 **4,5 s** (ver sección 5) |
-| Evaluación completa con IA (extracción + reglas), en local | 3,2–3,4 s por informe; la primera llamada 5,1 s |
+| **Evaluación completa con IA desde la URL pública** (`POST /api/evaluar`, 8 casos sintéticos, extracción + reglas + red) | p50 **2,7 s** · p95 **3,7 s** (en el servidor: p50 2,5 s · p95 3,3 s) |
 | Notion: informe en `pendiente` → resolución escrita, en producción | 16–64 s (4 pruebas); casi todo es la espera del webhook, porque Notion agrupa los eventos de páginas antes de enviarlos |
 
 **Prueba de punta a punta en producción:** un informe de P003 escrito solo en texto ("llega al cuarto de urgencias… apendicectomía de emergencia"), con una póliza que no cumplía la carencia (5 de 8 meses). La IA detectó la emergencia, el agente omitió la carencia y escribió en Notion `PREAPROBADA` (`AUT-P003-20260927`) en ~64 s, sin intervención humana. Con el extractor sin IA ese mismo informe se habría denegado por carencia.
