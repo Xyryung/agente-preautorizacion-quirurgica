@@ -186,6 +186,7 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
     const c = datos.casos.find((x) => x.id === $("caso").value);
     $("caso-ayuda").textContent = c ? "Póliza sugerida: " + c.poliza_id + ". Puedes editar el texto." : "";
     if (c) { $("texto").value = c.texto; $("poliza").value = c.poliza_id; }
+    else { $("texto").value = ""; $("texto").focus(); }
     mostrarPoliza(); contar();
   });
   mostrarPoliza();
