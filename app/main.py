@@ -14,11 +14,12 @@ from datetime import date
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from app import proteccion
+from app import proteccion, webhook_notion
 from preauth.reglas import InformeMedico, Poliza, evaluar
 
 app = FastAPI(title="Agente de Pre-Autorización Quirúrgica", version="0.1.0")
 proteccion.instalar(app)
+app.include_router(webhook_notion.router)
 
 POLIZA_DEMO = Poliza("P001", ["Colecistectomía"], date(2024, 1, 1), {"default": 8}, 50000, 5000)
 
