@@ -1,0 +1,108 @@
+"""Issue #8: paginacion, reintentos 429 e idempotencia (todo con dobles, sin red)."""
+import pytest
+
+from notion_client.errors import APIResponseError
+
+import preauth.notion_repo as nr
+
+
+class Fake429(Exception):
+    status = 429
+
+    def __init__(self, retry_after="1"):
+        super().__init__("rate limited")
+        self.response = type("R", (), {"headers": {"Retry-After": retry_after}})()
+
+
+class Fake400(Exception):
+    status = 400
+
+    def __init__(self):
+        super().__init__("bad")
+        self.response = type("R", (), {"headers": {}})()
+
+
+# los reintentos solo dependen de .status/.response, no de la clase real
+import preauth.notion_repo as _nr_mod
+_orig_es_429 = _nr_mod._es_429
+_nr_mod._es_429 = lambda err: getattr(err, "status", None) == 429
+
+
+def test_query_all_pagina_150_en_dos_paginas(monkeypatch):
+    pag1 = {"results": [{"id": f"p{i}"} for i in range(100)], "has_more": True, "next_cursor": "c2"}
+    pag2 = {"results": [{"id": f"p{i}"} for i in range(100, 150)], "has_more": False, "next_cursor": None}
+    llamadas = []
+
+    class DS:
+        def query(self, **kw):
+            llamadas.append(kw)
+            return pag1 if kw.get("start_cursor") is None else pag2
+
+    class FakeClient:
+        data_sources = DS()
+
+    monkeypatch.setattr(nr, "get_client", lambda: FakeClient())
+    out = nr.query_all("ds", dormir=lambda s: None)
+    assert len(out) == 150
+    assert llamadas[1]["start_cursor"] == "c2"
+
+
+def test_con_reintentos_respeta_retry_after():
+    intentos = []
+    esperas = []
+
+    def flaky():
+        intentos.append(1)
+        if len(intentos) < 3:
+            raise Fake429(retry_after="2")
+        return "ok"
+
+    assert nr.con_reintentos(flaky, dormir=esperas.append) == "ok"
+    assert esperas == [2.0, 2.0]
+
+
+def test_con_reintentos_no_reintenta_otros_errores():
+    with pytest.raises(Fake400):
+        nr.con_reintentos(lambda: (_ for _ in ()).throw(Fake400()), dormir=lambda s: None)
+
+
+def test_doble_ejecucion_no_duplica(monkeypatch):
+    creadas = []
+    consultas_res = {"n": 0}
+
+    class Pages:
+        def create(self, **kw):
+            creadas.append(kw)
+            return {"id": "res1"}
+
+        def update(self, **kw):
+            return {}
+
+    class DS:
+        def query(self, **kw):
+            f = kw.get("filter", {})
+            if f.get("property") == "estado":
+                return {"results": [{"id": "inf1", "properties": {}}], "has_more": False}
+            consultas_res["n"] += 1  # filtro por relation informe
+            if consultas_res["n"] == 1:
+                return {"results": [], "has_more": False}
+            return {"results": [{"id": "res1"}], "has_more": False}
+
+    class FakeClient:
+        data_sources = DS()
+        pages = Pages()
+
+    monkeypatch.setattr(nr, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(nr, "data_sources_ids",
+                        lambda: {"informes": "a", "polizas": "b", "resoluciones": "c"})
+    monkeypatch.setattr(nr, "fetch_poliza", lambda pid, **k: object())
+    monkeypatch.setattr(nr, "evaluar", lambda pol, inf: {
+        "decision": type("D", (), {"value": "PREAPROBADA"})(),
+        "motivo": "ok", "faltantes": [], "autorizacion_id": "AUT-X"})
+    monkeypatch.setattr(nr, "get_text", lambda pr, name: "P001" if "paciente" in name else "")
+    monkeypatch.setattr(nr, "_autofill", lambda *a, **k: None)
+
+    nr.run_once.__wrapped__ if hasattr(nr.run_once, "__wrapped__") else None
+    nr.run_once(autofill=False)
+    nr.run_once(autofill=False)
+    assert len(creadas) == 1
