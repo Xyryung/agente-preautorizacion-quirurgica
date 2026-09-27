@@ -3,6 +3,7 @@ Agente de Pre-Autorización Quirúrgica en Tiempo Real
 Flujo: Notion DB (Informe Hospital + Póliza) -> Agente IA -> Decisión instantánea
 """
 import calendar
+import re
 from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import List, Literal
@@ -112,6 +113,18 @@ def meses_afiliado(poliza: Poliza, hoy: date) -> int:
     return max(meses, 0)
 
 PROCEDIMIENTOS_SIN_DATO = {"", "desconocido"}
+# Categorias CIE-10 (3 caracteres) que habitualmente justifican cada procedimiento (issue #7).
+# Red de seguridad determinista junto al veredicto de la IA: un diagnostico fuera de la
+# lista va a revision manual, nunca a denegacion. Debe validarla personal clinico.
+DIAGNOSTICOS_HABITUALES = {
+    "Colecistectomía": {"K80", "K81", "K82"},
+    "Apendicectomía": {"K35", "K36", "K37", "K38"},
+    "Artroplastia": {"M15", "M16", "M17", "M19", "S72"},
+    "Cataratas": {"H25", "H26", "H28"},
+    "Hernia inguinal": {"K40"},
+    "Rinoplastia estética": {"Z41"},
+}
+_CATEGORIA_CIE10 = re.compile(r"[A-Z]\d{2}")
 # Red de seguridad, no calibracion: en 10 informes sinteticos los casos normales
 # dieron >= 0.90 y el informe vacio 0.60 (ver README).
 UMBRAL_CONFIANZA = 0.7
@@ -148,25 +161,41 @@ def _regla_extraccion(informe: InformeMedico) -> List[Hallazgo]:
                          + "; ".join(razones) + ".")]
     return []
 
-def _regla_coherencia(informe: InformeMedico) -> List[Hallazgo]:
-    """Coherencia diagnostico-procedimiento segun la IA (issue #7).
+def _categoria_cie10(codigo: str) -> str | None:
+    """'k80.2 ' -> 'K80'. None si el texto no empieza como un codigo CIE-10."""
+    m = _CATEGORIA_CIE10.match((codigo or "").strip().upper())
+    return m.group(0) if m else None
 
-    Solo "incoherente" genera un hallazgo, y siempre de REVISION: un juicio clinico
-    del modelo puede enviar el caso a una persona, nunca denegarlo.
+
+def _regla_coherencia(informe: InformeMedico) -> List[Hallazgo]:
+    """Coherencia diagnostico-procedimiento (issue #7). Como maximo un hallazgo, nunca deniega.
+
+    Combina el veredicto de la IA con una tabla determinista: la IA explica y cubre
+    diagnosticos fuera de la tabla; la tabla no varia entre ejecuciones.
     """
+    razones = []
     veredicto = norm(informe.coherencia_diagnostico or "")
+    diagnostico = (informe.diagnostico_cie10 or "").strip()
+    procedimiento_conocido = norm(informe.procedimiento) not in PROCEDIMIENTOS_SIN_DATO
+
     if veredicto == "incoherente":
         justificacion = informe.justificacion_coherencia.strip() or "sin justificación"
-        return [Hallazgo("coherencia", Resultado.REVISION,
-                         f"El diagnóstico no parece justificar el procedimiento ({justificacion}); "
-                         "requiere revisión manual.")]
-    hay_con_que_evaluar = (informe.diagnostico_cie10.strip()
-                           and norm(informe.procedimiento) not in PROCEDIMIENTOS_SIN_DATO)
-    if veredicto == "no_evaluable" and hay_con_que_evaluar:
-        return [Hallazgo("coherencia", Resultado.REVISION,
-                         f"No se pudo evaluar si el diagnóstico {informe.diagnostico_cie10.strip()} "
-                         f"justifica el procedimiento {informe.procedimiento}; requiere revisión manual.")]
-    return []
+        razones.append(f"la IA indica que el diagnóstico no justifica el procedimiento ({justificacion})")
+    elif veredicto == "no_evaluable" and diagnostico and procedimiento_conocido:
+        razones.append(f"no se pudo evaluar si el diagnóstico {diagnostico} "
+                       f"justifica el procedimiento {informe.procedimiento}")
+
+    habituales = _buscar(DIAGNOSTICOS_HABITUALES, informe.procedimiento, None)
+    categoria = _categoria_cie10(diagnostico)
+    if habituales and categoria and categoria not in habituales:
+        razones.append(f"el diagnóstico {diagnostico} no está entre los habituales para "
+                       f"{informe.procedimiento} ({', '.join(sorted(habituales))})")
+
+    if not razones:
+        return []
+    return [Hallazgo("coherencia", Resultado.REVISION,
+                     "Coherencia diagnóstico-procedimiento: " + "; ".join(razones)
+                     + "; requiere revisión manual.")]
 
 def _poliza_vigente(poliza: Poliza, hoy: date) -> bool:
     return poliza.fecha_inicio <= hoy
