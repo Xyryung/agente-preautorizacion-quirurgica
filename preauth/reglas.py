@@ -11,7 +11,41 @@ from preauth.texto import norm
 class Decision(str, Enum):
     PREAPROBADA = "PREAPROBADA"
     DOCUMENTOS_FALTANTES = "SOLICITUD_DOCUMENTOS_FALTANTES"
+    REVISION_MANUAL = "REVISION_MANUAL"
     DENEGADA = "DENEGADA"
+
+
+class Resultado(str, Enum):
+    """Resultado de UNA regla. La decision final se deriva de todos (ver decidir())."""
+    CUMPLE = "cumple"
+    INFORMATIVO = "informativo"          # no cambia la decision; se muestra en el motivo
+    FALTAN_DOCUMENTOS = "faltan_documentos"
+    REVISION = "revision"
+    NO_CUMPLE = "no_cumple"
+
+
+@dataclass(frozen=True)
+class Hallazgo:
+    regla: str            # "datos", "cobertura", "carencia", "monto", "documentos"
+    resultado: Resultado
+    mensaje: str
+
+
+# De mayor a menor prioridad: el primer resultado presente define la decision.
+PRECEDENCIA = [
+    (Resultado.NO_CUMPLE, Decision.DENEGADA),
+    (Resultado.REVISION, Decision.REVISION_MANUAL),
+    (Resultado.FALTAN_DOCUMENTOS, Decision.DOCUMENTOS_FALTANTES),
+]
+
+
+def decidir(hallazgos: List[Hallazgo]) -> Decision:
+    """DENEGADA > REVISION_MANUAL > DOCUMENTOS_FALTANTES > PREAPROBADA."""
+    presentes = {h.resultado for h in hallazgos}
+    for resultado, decision in PRECEDENCIA:
+        if resultado in presentes:
+            return decision
+    return Decision.PREAPROBADA
 
 @dataclass
 class Poliza:
@@ -59,45 +93,110 @@ def _buscar(tabla: dict, clave: str, por_defecto):
 def meses_afiliado(poliza: Poliza, hoy: date) -> int:
     return (hoy.year - poliza.fecha_inicio.year) * 12 + (hoy.month - poliza.fecha_inicio.month)
 
-def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) -> dict:
-    faltantes, motivos = [], []
+PROCEDIMIENTOS_SIN_DATO = {"", "desconocido"}
+MOTIVO_PREAPROBADA = "Cumple cobertura, carencia y documentación. Pre-aprobación emitida."
 
-    # 1. Cobertura
+# Que hallazgos explican cada decision en el campo 'motivo'.
+# Los INFORMATIVO se agregan siempre al final.
+RESULTADOS_DEL_MOTIVO = {
+    Decision.DENEGADA: {Resultado.NO_CUMPLE},
+    Decision.REVISION_MANUAL: {Resultado.REVISION, Resultado.FALTAN_DOCUMENTOS},
+    Decision.DOCUMENTOS_FALTANTES: {Resultado.FALTAN_DOCUMENTOS},
+    Decision.PREAPROBADA: set(),
+}
+
+
+def _regla_datos(informe: InformeMedico) -> List[Hallazgo]:
+    if norm(informe.procedimiento) in PROCEDIMIENTOS_SIN_DATO:
+        return [Hallazgo("datos", Resultado.REVISION,
+                         "El informe no indica un procedimiento reconocible; requiere revisión manual.")]
+    return []
+
+
+def _regla_cobertura(poliza: Poliza, informe: InformeMedico) -> List[Hallazgo]:
+    if norm(informe.procedimiento) in PROCEDIMIENTOS_SIN_DATO:
+        return []  # sin procedimiento no hay cobertura que evaluar (ver _regla_datos)
     if not _contiene(poliza.cobertura_procedimientos, informe.procedimiento):
-        return {"decision": Decision.DENEGADA, "motivo": f"Procedimiento '{informe.procedimiento}' no cubierto por póliza.", "faltantes": []}
+        return [Hallazgo("cobertura", Resultado.NO_CUMPLE,
+                         f"Procedimiento '{informe.procedimiento}' no cubierto por póliza.")]
     if _contiene(poliza.exclusiones, informe.procedimiento):
-        return {"decision": Decision.DENEGADA, "motivo": "Procedimiento en lista de exclusiones.", "faltantes": []}
+        return [Hallazgo("cobertura", Resultado.NO_CUMPLE, "Procedimiento en lista de exclusiones.")]
+    return [Hallazgo("cobertura", Resultado.CUMPLE, "Procedimiento cubierto por la póliza.")]
 
-    # 2. Carencia (se omite en emergencia)
-    if norm(informe.urgencia) != "emergencia":
-        carencia_req = _buscar(poliza.carencia_meses, informe.procedimiento,
-                       _buscar(poliza.carencia_meses, "default", 0))
-        antiguedad = meses_afiliado(poliza, hoy)
-        if antiguedad < carencia_req:
-            return {"decision": Decision.DENEGADA,
-                    "motivo": f"No cumple carencia: {antiguedad}/{carencia_req} meses.",
-                    "faltantes": []}
 
-    # 3. Monto
+def _regla_carencia(poliza: Poliza, informe: InformeMedico, hoy: date) -> List[Hallazgo]:
+    if norm(informe.urgencia) == "emergencia":
+        return [Hallazgo("carencia", Resultado.INFORMATIVO,
+                         "Emergencia: se omitió la carencia; requiere revisión posterior.")]
+    carencia_req = _buscar(poliza.carencia_meses, informe.procedimiento,
+                           _buscar(poliza.carencia_meses, "default", 0))
+    antiguedad = meses_afiliado(poliza, hoy)
+    if antiguedad < carencia_req:
+        return [Hallazgo("carencia", Resultado.NO_CUMPLE,
+                         f"No cumple carencia: {antiguedad}/{carencia_req} meses.")]
+    return [Hallazgo("carencia", Resultado.CUMPLE, f"Cumple carencia: {antiguedad}/{carencia_req} meses.")]
+
+
+def _regla_monto(poliza: Poliza, informe: InformeMedico) -> List[Hallazgo]:
+    if informe.costo_estimado <= 0:
+        return [Hallazgo("monto", Resultado.FALTAN_DOCUMENTOS,
+                         "Falta el costo estimado; se requiere el presupuesto del hospital.")]
     if poliza.monto_usado + informe.costo_estimado > poliza.monto_maximo:
-        return {"decision": Decision.DENEGADA, "motivo": "Excede monto máximo de póliza.", "faltantes": []}
+        return [Hallazgo("monto", Resultado.NO_CUMPLE, "Excede monto máximo de póliza.")]
+    return [Hallazgo("monto", Resultado.CUMPLE, "Dentro del monto disponible de la póliza.")]
 
-    # 4. Documentos
-    requeridos = set(DOCS_BASE + _buscar(DOCS_POR_PROCEDIMIENTO, informe.procedimiento, DOCS_POR_PROCEDIMIENTO["default"]))
+
+def _documentos_faltantes(poliza: Poliza, informe: InformeMedico) -> List[str]:
+    requeridos = set(DOCS_BASE + _buscar(DOCS_POR_PROCEDIMIENTO, informe.procedimiento,
+                                         DOCS_POR_PROCEDIMIENTO["default"]))
     if _contiene(poliza.requiere_segunda_opinion, informe.procedimiento):
         requeridos.add("segunda_opinion")
+    if informe.costo_estimado <= 0:
+        requeridos.add("presupuesto_hospital")
     adjuntos = {norm(d) for d in informe.documentos_adjuntos}
-    faltantes = [d for d in requeridos if norm(d) not in adjuntos]
+    return sorted(d for d in requeridos if norm(d) not in adjuntos)
 
+
+def _regla_documentos(faltantes: List[str]) -> List[Hallazgo]:
     if faltantes:
-        return {"decision": Decision.DOCUMENTOS_FALTANTES,
-                "motivo": "Faltan documentos para pre-aprobar.",
-                "faltantes": faltantes}
+        return [Hallazgo("documentos", Resultado.FALTAN_DOCUMENTOS, "Faltan documentos para pre-aprobar.")]
+    return [Hallazgo("documentos", Resultado.CUMPLE, "Documentación completa.")]
 
-    return {"decision": Decision.PREAPROBADA,
-            "motivo": "Cumple cobertura, carencia y documentación. Pre-aprobación emitida.",
-            "faltantes": [],
-            "autorizacion_id": f"AUT-{informe.paciente_id}-{hoy.strftime('%Y%m%d')}"}
+
+def _motivo(decision: Decision, hallazgos: List[Hallazgo]) -> str:
+    principales = [h.mensaje for h in hallazgos if h.resultado in RESULTADOS_DEL_MOTIVO[decision]]
+    informativos = [h.mensaje for h in hallazgos if h.resultado is Resultado.INFORMATIVO]
+    if decision is Decision.PREAPROBADA:
+        # Sin informativos se conserva el texto historico exacto.
+        principales = ["Pre-aprobación emitida."] if informativos else [MOTIVO_PREAPROBADA]
+    return " ".join(principales + informativos)
+
+
+def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) -> dict:
+    """Evalua TODAS las reglas y decide por precedencia (ver decidir()).
+
+    Devuelve un dict con las mismas claves de siempre (decision, motivo,
+    faltantes y autorizacion_id si se pre-aprueba) mas 'hallazgos'.
+    """
+    faltantes = _documentos_faltantes(poliza, informe)
+    hallazgos = (
+        _regla_datos(informe)
+        + _regla_cobertura(poliza, informe)
+        + _regla_carencia(poliza, informe, hoy)
+        + _regla_monto(poliza, informe)
+        + _regla_documentos(faltantes)
+    )
+    decision = decidir(hallazgos)
+    resultado = {
+        "decision": decision,
+        "motivo": _motivo(decision, hallazgos),
+        # Una denegacion no se corrige con documentos: no se piden.
+        "faltantes": [] if decision is Decision.DENEGADA else faltantes,
+        "hallazgos": hallazgos,
+    }
+    if decision is Decision.PREAPROBADA:
+        resultado["autorizacion_id"] = f"AUT-{informe.paciente_id}-{hoy.strftime('%Y%m%d')}"
+    return resultado
 
 # ---- Integración Notion: el esquema vive en preauth/esquema.py ----
 from preauth.esquema import INFORMES_PROPS, POLIZAS_PROPS, RESOLUCIONES_PROPS
