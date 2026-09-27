@@ -17,6 +17,9 @@
 | Región | Virginia (US East) |
 | `PYTHON_VERSION` | `3.14.3` (igual que en local y en CI) |
 
+Las dependencias están fijadas en `requirements.txt` (desde #1), así que Render instala
+exactamente las mismas versiones que se probaron en local.
+
 ### Variables de entorno
 
 Los secretos se configuran **solo** en Render → Environment, nunca en el repositorio.
