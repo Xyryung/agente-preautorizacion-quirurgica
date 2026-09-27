@@ -108,6 +108,7 @@ class _FechaFija(date):
 
 def test_sin_hoy_explicito_se_usa_la_fecha_del_momento_de_la_llamada(monkeypatch):
     # Antes, date.today() se evaluaba UNA vez al importar el modulo.
-    monkeypatch.setattr(reglas, "date", _FechaFija)
+    # Desde #44 la fecha sale de hoy_local() (zona de Panama); se fija esa funcion.
+    monkeypatch.setattr(reglas, "hoy_local", _FechaFija.today)
     r = evaluar(poliza(), informe())
     assert r["autorizacion_id"] == "AUT-P001-20300115"

@@ -9,6 +9,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -83,3 +84,19 @@ def llm_settings() -> LLMSettings:
         ollama_url=_opcional("OLLAMA_URL", "http://localhost:11434"),
         ollama_model=_opcional("OLLAMA_MODEL", "llama3.2:3b"),
     )
+
+@lru_cache(maxsize=1)
+def zona_horaria() -> ZoneInfo:
+    """Zona horaria del negocio (ZONA_HORARIA, por defecto America/Panama). Issue #44.
+
+    El servidor (Render) corre en UTC: sin esto, entre las 19:00 y las 23:59 de Panama
+    la fecha ya seria la del dia siguiente.
+    """
+    nombre = _opcional("ZONA_HORARIA", "America/Panama")
+    try:
+        return ZoneInfo(nombre)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ConfigError(
+            f"ZONA_HORARIA='{nombre}' no es una zona horaria valida (ejemplo: America/Panama). "
+            "En Windows hace falta el paquete tzdata."
+        ) from None

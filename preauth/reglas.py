@@ -5,9 +5,10 @@ Flujo: Notion DB (Informe Hospital + Póliza) -> Agente IA -> Decisión instant�
 import calendar
 import re
 from dataclasses import dataclass, field, replace
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import List, Literal
 from enum import Enum
+from preauth.config import zona_horaria
 from preauth.texto import norm
 
 class Decision(str, Enum):
@@ -100,6 +101,14 @@ def _buscar(tabla: dict, clave: str, por_defecto):
         if norm(k) == objetivo:
             return v
     return por_defecto
+
+def hoy_local(ahora: datetime | None = None) -> date:
+    """Fecha de hoy en la zona horaria del negocio, no la del servidor (issue #44).
+
+    'ahora' permite fijar el instante en pruebas; debe llevar zona horaria (aware).
+    """
+    ahora = ahora or datetime.now(timezone.utc)
+    return ahora.astimezone(zona_horaria()).date()
 
 def meses_afiliado(poliza: Poliza, hoy: date) -> int:
     """Meses COMPLETOS de afiliacion al dia 'hoy'. Nunca es negativo.
@@ -292,7 +301,7 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date | None = None) -> 
     faltantes y autorizacion_id si se pre-aprueba) mas 'hallazgos'.
     """
     if hoy is None:
-        hoy = date.today()  # se lee en cada llamada, no una sola vez al importar
+        hoy = hoy_local()  # en cada llamada (#4) y en la zona de Panama (#44)
 
     faltantes = _documentos_faltantes(poliza, informe)
     hallazgos = (
