@@ -1,9 +1,9 @@
 # Dependencias de ejecucion (las que instala Render).
-# Cuando todo funcione en local, fija versiones exactas con las que
-# muestra `pip list` (ver issue de reestructuracion del repositorio).
-fastapi
-uvicorn[standard]
-notion-client
-openai
-pydantic
-python-dotenv
+# Versiones fijadas: son las verificadas en local. Actualizar a proposito,
+# probando en local antes de hacer merge a main.
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
+notion-client==3.1.0
+openai==3.19.2
+pydantic==2.13.5
+python-dotenv==1.2.3
