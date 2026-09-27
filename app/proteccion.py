@@ -73,11 +73,13 @@ limitador = LimitadorPorIP()
 
 
 def ip_cliente(request: Request) -> str:
-    # Render pone la app detras de un proxy (Cloudflare). True-Client-IP lo
-    # escribe el proxy y no se puede falsificar; X-Forwarded-For queda de respaldo.
-    for encabezado in ("true-client-ip", "cf-connecting-ip"):
-        if request.headers.get(encabezado):
-            return request.headers[encabezado].strip()
+    # Render sirve la app detras de Cloudflare, que siempre sobrescribe
+    # CF-Connecting-IP con la IP real: el cliente no lo puede falsificar.
+    # True-Client-IP no se usa: sin plan Enterprise podria venir del cliente.
+    ip_cloudflare = request.headers.get("cf-connecting-ip")
+    if ip_cloudflare:
+        return ip_cloudflare.strip()
+    # Fuera de Cloudflare (por ejemplo en local)
     reenviada = request.headers.get("x-forwarded-for")
     if reenviada:
         return reenviada.split(",")[0].strip()

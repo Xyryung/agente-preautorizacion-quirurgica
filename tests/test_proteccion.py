@@ -19,8 +19,15 @@ def test_20_solicitudes_seguidas_misma_ip_da_429():
 
 def test_ips_distintas_tienen_limites_separados():
     for _ in range(20):
-        client.get("/api/demo", headers={"True-Client-IP": "10.0.0.1"})
-    assert client.get("/api/demo", headers={"True-Client-IP": "10.0.0.2"}).status_code == 200
+        client.get("/api/demo", headers={"CF-Connecting-IP": "10.0.0.1"})
+    assert client.get("/api/demo", headers={"CF-Connecting-IP": "10.0.0.2"}).status_code == 200
+
+
+def test_true_client_ip_falso_no_salta_el_limite():
+    for i in range(20):
+        client.get("/api/demo", headers={"CF-Connecting-IP": "10.0.0.9", "True-Client-IP": f"1.1.1.{i}"})
+    r = client.get("/api/demo", headers={"CF-Connecting-IP": "10.0.0.9", "True-Client-IP": "9.9.9.9"})
+    assert r.status_code == 429
 
 
 def test_health_no_cuenta_para_el_limite():
