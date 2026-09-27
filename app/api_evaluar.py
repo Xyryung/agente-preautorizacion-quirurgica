@@ -141,6 +141,7 @@ def informe_desde_extraccion(r: ResultadoExtraccion, paciente_id: str) -> Inform
         citas_no_encontradas=list(r.citas_no_encontradas),
         coherencia_diagnostico=datos.coherencia_diagnostico,
         justificacion_coherencia=datos.justificacion_coherencia,
+        procedimiento_regex=r.procedimiento_regex,
     )
 
 

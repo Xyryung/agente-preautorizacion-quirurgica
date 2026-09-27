@@ -77,6 +77,8 @@ class InformeMedico:
     # Coherencia diagnostico-procedimiento segun la IA (issue #7). None: no hubo extraccion.
     coherencia_diagnostico: str | None = None
     justificacion_coherencia: str = ""
+    # Procedimiento por palabras clave si difirio del de la IA (issue #37). None: coinciden o no hubo extraccion.
+    procedimiento_regex: str | None = None
 
 DOCS_BASE = ["identificacion", "informe_medico", "consentimiento"]
 DOCS_POR_PROCEDIMIENTO = {
@@ -197,6 +199,20 @@ def _regla_coherencia(informe: InformeMedico) -> List[Hallazgo]:
                      "Coherencia diagnóstico-procedimiento: " + "; ".join(razones)
                      + "; requiere revisión manual.")]
 
+def _regla_discrepancia(informe: InformeMedico) -> List[Hallazgo]:
+    """La IA y la busqueda por palabras clave difieren en el procedimiento.
+
+    Siempre es REVISION (nunca denegacion): el revisor decide cual vale.
+    """
+    rx = informe.procedimiento_regex or ""
+    if not rx or norm(informe.procedimiento) in PROCEDIMIENTOS_SIN_DATO:
+        return []
+    if norm(rx) == norm(informe.procedimiento):
+        return []
+    return [Hallazgo("procedimiento", Resultado.REVISION,
+                     f"La IA indica '{informe.procedimiento}' pero la búsqueda por palabras "
+                     f"clave indica '{rx}'; requiere revisión manual.")]
+
 def _poliza_vigente(poliza: Poliza, hoy: date) -> bool:
     return poliza.fecha_inicio <= hoy
 
@@ -283,6 +299,7 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date | None = None) -> 
         _regla_datos(informe)
         + _regla_extraccion(informe)
         + _regla_coherencia(informe)
+        + _regla_discrepancia(informe)
         + _regla_vigencia(poliza, hoy)
         + _regla_cobertura(poliza, informe)
         + _regla_carencia(poliza, informe, hoy)

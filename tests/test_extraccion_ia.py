@@ -150,11 +150,12 @@ def test_texto_demasiado_largo_se_recorta_con_advertencia():
 
 def test_compatibilidad_mantiene_las_claves_del_diccionario():
     d = extraer_desde_texto(TEXTO)
-    # Claves de siempre + las dos de #6b (confianza y citas no encontradas).
+    # Claves de siempre + #6b + #7 + discrepancia IA/regex.
     assert set(d) == {"procedimiento", "cie", "documentos", "urgencia",
                       "paciente_id", "medico", "costo",
                       "confianza", "citas_no_encontradas",
-                      "coherencia", "justificacion_coherencia"}
+                      "coherencia", "justificacion_coherencia",
+                      "procedimiento_regex"}
 
 
 def test_compatibilidad_traduce_la_salida_del_modelo():

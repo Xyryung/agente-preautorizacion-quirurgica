@@ -78,6 +78,7 @@ class ResultadoExtraccion:
     error: str | None = None        # por que se uso el respaldo, si se uso
     advertencias: tuple[str, ...] = ()
     citas_no_encontradas: tuple[str, ...] = ()  # evidencia que no aparece en el informe
+    procedimiento_regex: str | None = None  # busqueda por palabras clave si difiere del de la IA
 
 
 TIMEOUT_S = 20.0
@@ -197,7 +198,8 @@ def extraer(texto: str, *, proveedor: str | None = None, cliente=None) -> Result
                                         cfg.openai_reasoning_effort)
             ms = (time.perf_counter() - inicio) * 1000
             return ResultadoExtraccion(_normalizar(datos), "openai", ms, None, advertencias,
-                                       tuple(citas_no_encontradas(datos, texto)))
+                                       tuple(citas_no_encontradas(datos, texto)),
+                                       _discrepancia_regex(datos.procedimiento, texto))
         except Exception as e:  # respaldo deliberado: cualquier fallo de la IA usa regex
             error = f"{type(e).__name__}: {e}"[:300]
             logger.warning("Extraccion con OpenAI fallo, se usa regex: %s", error)
@@ -207,6 +209,21 @@ def extraer(texto: str, *, proveedor: str | None = None, cliente=None) -> Result
     datos = _normalizar(_extraer_con_regex(texto))
     ms = (time.perf_counter() - inicio) * 1000
     return ResultadoExtraccion(datos, "regex", ms, error, advertencias)
+
+
+def _discrepancia_regex(procedimiento_ia: str, texto: str) -> str | None:
+    """Procedimiento por palabras clave si difiere del de la IA (ambos conocidos).
+
+    La IA a veces reescribe el procedimiento para que coincida con el
+    diagnostico; la busqueda por palabras clave acierta mas. Solo se marca
+    cuando ambos son conocidos y difieren (nunca si la regex no encuentra nada).
+    """
+    proc_regex = _campos_con_regex(texto)["procedimiento"]
+    if not proc_regex or procedimiento_ia == DESCONOCIDO:
+        return None
+    if norm(proc_regex) == norm(procedimiento_ia):
+        return None
+    return proc_regex
 
 
 def extraer_desde_texto(texto: str, **opciones) -> dict:
@@ -230,6 +247,7 @@ def extraer_desde_texto(texto: str, **opciones) -> dict:
         "citas_no_encontradas": list(r.citas_no_encontradas),       # issue #6b
         "coherencia": d.coherencia_diagnostico,                      # issue #7
         "justificacion_coherencia": d.justificacion_coherencia,      # issue #7
+        "procedimiento_regex": r.procedimiento_regex or "",
     }
 
 
