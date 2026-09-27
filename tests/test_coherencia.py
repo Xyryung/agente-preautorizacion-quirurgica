@@ -66,7 +66,8 @@ def test_incoherente_va_a_revision_manual_con_la_justificacion():
 
 @pytest.mark.parametrize("veredicto", ["coherente", None])
 def test_coherente_o_sin_extraccion_no_genera_hallazgo(veredicto):
-    r = evaluar(poliza(), informe(coherencia_diagnostico=veredicto), HOY)
+    # K80.2 (colelitiasis) es un diagnostico habitual para la colecistectomia.
+    r = evaluar(poliza(), informe(coherencia_diagnostico=veredicto, diagnostico_cie10="K80.2"), HOY)
     assert r["decision"] is Decision.PREAPROBADA
     assert hallazgos_de(r, "coherencia") == []
 
@@ -173,3 +174,42 @@ def test_sin_extraccion_la_coherencia_queda_vacia(monkeypatch):
     inf = _ejecutar_con_autofill(monkeypatch, None)
     assert inf.coherencia_diagnostico is None
     assert inf.justificacion_coherencia == ""
+
+
+# --- Tabla de diagnosticos habituales (red de seguridad determinista) --------
+# Medido en 4 ejecuciones: la IA califico S11 (Z41.1 + colecistectomia) como
+# "coherente" en 2 de ellas. La tabla lo detecta siempre.
+
+def test_la_tabla_detecta_un_diagnostico_no_habitual_aunque_la_ia_diga_coherente():
+    r = evaluar(poliza(), informe(coherencia_diagnostico="coherente"), HOY)
+    assert r["decision"] is Decision.REVISION_MANUAL
+    [h] = hallazgos_de(r, "coherencia")
+    assert "Z41.1" in h.mensaje and "habituales" in h.mensaje
+
+
+def test_la_tabla_tambien_aplica_a_informes_sin_extraccion():
+    r = evaluar(poliza(), informe(coherencia_diagnostico=None), HOY)
+    assert r["decision"] is Decision.REVISION_MANUAL
+
+
+def test_la_tabla_compara_por_categoria_y_nombre_normalizado():
+    r = evaluar(poliza(), informe(procedimiento="COLECISTECTOMIA", diagnostico_cie10=" k81.1 "), HOY)
+    assert hallazgos_de(r, "coherencia") == []
+
+
+def test_procedimiento_fuera_de_la_tabla_no_se_marca():
+    r = evaluar(poliza(), informe(procedimiento="Bypass gástrico", diagnostico_cie10="E66.0"), HOY)
+    assert hallazgos_de(r, "coherencia") == []
+
+
+def test_diagnostico_sin_formato_cie10_no_se_marca():
+    r = evaluar(poliza(), informe(diagnostico_cie10="colelitiasis"), HOY)
+    assert hallazgos_de(r, "coherencia") == []
+
+
+def test_ia_y_tabla_producen_un_solo_hallazgo_con_ambas_razones():
+    r = evaluar(poliza(), informe(coherencia_diagnostico="incoherente",
+                                  justificacion_coherencia=JUSTIFICACION), HOY)
+    [h] = hallazgos_de(r, "coherencia")
+    assert JUSTIFICACION in h.mensaje and "habituales" in h.mensaje
+    assert h.resultado is Resultado.REVISION
