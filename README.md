@@ -134,6 +134,8 @@ Si la decisión es `DENEGADA`, `faltantes` queda vacío: una denegación no se c
 
 Se cuentan meses completos: un mes se cumple el mismo día del mes siguiente. Si ese día no existe (póliza iniciada el 31 y un mes con menos días), se cumple el último día de ese mes; por ejemplo, del 31 de enero al 28 de febrero hay un mes. Una póliza que inicia después de la fecha de evaluación no está vigente: el caso pasa a revisión manual y no se evalúa la carencia.
 
+La fecha de evaluación es la de Panamá (`ZONA_HORARIA`, por defecto `America/Panama`), no la del servidor, que corre en UTC.
+
 ## 5. Extracción con IA
 
 El informe en texto libre se convierte en datos estructurados con la API de OpenAI, usando salida estructurada con esquema estricto: el modelo solo puede elegir procedimientos, documentos y urgencias de nuestras listas. La IA **extrae**; las reglas deterministas **deciden**.
