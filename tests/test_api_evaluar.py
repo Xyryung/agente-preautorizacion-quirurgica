@@ -265,3 +265,46 @@ def test_informe_estructurado_no_aplica_senales_de_extraccion():
         "documentos_adjuntos": ["identificacion", "informe_medico", "consentimiento",
                                 "ecografia_abdominal", "analitica"]}}).json()
     assert r["decision"] == "PREAPROBADA"
+
+
+# --- Validacion en español y sin 500 (issue #44) ---
+
+def poliza_valida(**cambios):
+    base = {"paciente_id": "P001", "cobertura": ["Colecistectomía"],
+            "fecha_inicio": "2024-01-01", "carencia_meses": {"default": 8},
+            "monto_maximo": 50000, "monto_usado": 5000}
+    base.update(cambios)
+    return base
+
+
+def informe_valido():
+    return {"procedimiento": "Colecistectomía", "costo_estimado": 8000,
+            "documentos_adjuntos": ["identificacion"]}
+
+
+def test_carencia_negativa_da_422_en_espanol():
+    r = client.post("/api/evaluar", json={
+        "poliza": poliza_valida(carencia_meses={"default": -1}),
+        "informe": informe_valido()})
+    assert r.status_code == 422
+    assert "entre 0 y 120" in r.json()["detail"]
+    assert "Input should be" not in r.json()["detail"]
+
+
+def test_fecha_anterior_a_1900_da_422_en_espanol():
+    r = client.post("/api/evaluar", json={
+        "poliza": poliza_valida(fecha_inicio="1899-12-31"),
+        "informe": informe_valido()})
+    assert r.status_code == 422
+    assert "1900" in r.json()["detail"]
+
+
+def test_nan_no_da_500():
+    import json as _json
+    cuerpo = _json.dumps({"poliza": poliza_valida(),
+                          "informe": {**informe_valido(), "costo_estimado": float("nan")}},
+                         allow_nan=True)
+    r = client.post("/api/evaluar", content=cuerpo,
+                    headers={"Content-Type": "application/json"})
+    assert r.status_code == 422
+    assert "finito" in r.json()["detail"]

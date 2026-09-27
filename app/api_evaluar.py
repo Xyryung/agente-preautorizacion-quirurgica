@@ -18,7 +18,7 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app import proteccion, webhook_notion
 from app.casos_demo import POLIZAS_DEMO
@@ -30,20 +30,41 @@ log = logging.getLogger("preauth.api")
 router = APIRouter(prefix="/api", tags=["evaluación"])
 
 MAX_ELEMENTOS = 50  # listas de la poliza o del informe
+MONTO_MAXIMO_RAZONABLE = 10_000_000  # tope de cordura para montos de la demo
+CARENCIA_MAXIMA_MESES = 120  # 10 años: nadie tiene carencias mas largas
+FECHA_MINIMA = date(1900, 1, 1)
 
 
 # --------------------------------------------------------------------------
 # Modelos de entrada
 # --------------------------------------------------------------------------
 class PolizaEntrada(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)  # NaN/Infinity -> 422, no 500
+
     paciente_id: str = Field(max_length=50, examples=["P001"])
     cobertura: list[str] = Field(max_length=MAX_ELEMENTOS, examples=[["Colecistectomía"]])
     fecha_inicio: date = Field(examples=["2024-01-01"])
     carencia_meses: dict[str, int] = Field(default={"default": 0}, examples=[{"default": 8}])
-    monto_maximo: float = Field(gt=0, examples=[50000])
-    monto_usado: float = Field(default=0, ge=0, examples=[5000])
+    monto_maximo: float = Field(gt=0, le=MONTO_MAXIMO_RAZONABLE, examples=[50000])
+    monto_usado: float = Field(default=0, ge=0, le=MONTO_MAXIMO_RAZONABLE, examples=[5000])
     exclusiones: list[str] = Field(default=[], max_length=MAX_ELEMENTOS)
     requiere_segunda_opinion: list[str] = Field(default=[], max_length=MAX_ELEMENTOS)
+
+    @field_validator("fecha_inicio")
+    @classmethod
+    def fecha_a_partir_de_1900(cls, v: date) -> date:
+        if v < FECHA_MINIMA:
+            raise ValueError("La fecha de inicio debe ser a partir de 1900.")
+        return v
+
+    @field_validator("carencia_meses")
+    @classmethod
+    def carencia_entre_0_y_120(cls, v: dict[str, int]) -> dict[str, int]:
+        for proc, meses in v.items():
+            if not 0 <= meses <= CARENCIA_MAXIMA_MESES:
+                raise ValueError(
+                    f"La carencia de '{proc}' debe estar entre 0 y {CARENCIA_MAXIMA_MESES} meses.")
+        return v
 
     def a_poliza(self) -> Poliza:
         return Poliza(self.paciente_id, self.cobertura, self.fecha_inicio, self.carencia_meses,
@@ -52,12 +73,14 @@ class PolizaEntrada(BaseModel):
 
 
 class InformeEntrada(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)  # NaN/Infinity -> 422, no 500
+
     procedimiento: str = Field(max_length=100, examples=["Colecistectomía"])
     diagnostico_cie10: str = Field(default="", max_length=20, examples=["K80.2"])
     medico: str = Field(default="", max_length=100)
     urgencia: Literal["programada", "emergencia"] = "programada"
     documentos_adjuntos: list[str] = Field(default=[], max_length=MAX_ELEMENTOS)
-    costo_estimado: float = Field(default=0, ge=0, examples=[8000])
+    costo_estimado: float = Field(default=0, ge=0, le=MONTO_MAXIMO_RAZONABLE, examples=[8000])
 
 
 class SolicitudEvaluar(BaseModel):
