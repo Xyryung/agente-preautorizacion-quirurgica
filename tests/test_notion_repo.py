@@ -258,3 +258,84 @@ def test_confianza_cero_no_se_enmascara_y_manual_usa_defaults(monkeypatch):
     monkeypatch.setattr(nr, "_autofill", lambda *a, **k: None)
     nr.run_once(autofill=True)
     assert vistos[-1] == (None, [])
+
+
+# --- #43: informe sin poliza o sin paciente no queda pendiente para siempre ---
+
+class NotionFalso:
+    """Guarda las resoluciones creadas y los cambios de estado."""
+
+    def __init__(self):
+        self.creadas, self.actualizadas = [], []
+        falso = self
+
+        class Pages:
+            def create(self, **kw):
+                falso.creadas.append(kw)
+                return {"id": f"res{len(falso.creadas)}"}
+
+            def update(self, **kw):
+                falso.actualizadas.append(kw)
+                return {}
+
+        self.pages = Pages()
+
+
+def _informe(pid="P999"):
+    from preauth import esquema as E
+    props = {E.INF_PROCEDIMIENTO: {"select": {"name": "Colecistectomía"}},
+             E.INF_DOCUMENTOS: {"multi_select": [{"name": "identificacion"}]}}
+    if pid:
+        props[E.INF_PACIENTE_ID] = {"title": [{"plain_text": pid}]}
+    return {"id": "inf-sin-poliza", "properties": props}
+
+
+def _resolucion(notion):
+    from preauth import esquema as E
+    assert len(notion.creadas) == 1
+    p = notion.creadas[0]["properties"]
+    return (p[E.RES_DECISION]["select"]["name"], p[E.RES_MOTIVO]["rich_text"][0]["text"]["content"],
+            p[E.RES_INFORME]["relation"][0]["id"])
+
+
+def _marcado_procesado(notion):
+    from preauth import esquema as E
+    return {"page_id": "inf-sin-poliza",
+            "properties": {E.INF_ESTADO: {"status": {"name": E.ESTADO_PROCESADO}}}} in notion.actualizadas
+
+
+def test_informe_sin_poliza_crea_revision_manual_y_queda_procesado(monkeypatch):
+    monkeypatch.setattr(nr, "fetch_poliza", lambda pid, **k: (None, None))
+    monkeypatch.setattr(nr, "resolucion_existe", lambda informe_id, **k: False)
+    notion = NotionFalso()
+    nr.procesar_informe(notion, "res", _informe("P999"), autofill=False)
+    decision, motivo, informe = _resolucion(notion)
+    assert decision == "REVISION_MANUAL"
+    assert "No se encontró póliza para P999" in motivo
+    assert informe == "inf-sin-poliza"
+    assert _marcado_procesado(notion)
+
+
+def test_informe_sin_paciente_crea_revision_manual_sin_buscar_poliza(monkeypatch):
+    def no_deberia_buscar(pid, **k):
+        raise AssertionError("no se busca póliza sin paciente_id")
+    monkeypatch.setattr(nr, "fetch_poliza", no_deberia_buscar)
+    monkeypatch.setattr(nr, "resolucion_existe", lambda informe_id, **k: False)
+    notion = NotionFalso()
+    nr.procesar_informe(notion, "res", _informe(pid=None), autofill=False)
+    decision, motivo, _ = _resolucion(notion)
+    assert decision == "REVISION_MANUAL"
+    assert "El informe no identifica al paciente" in motivo
+    assert _marcado_procesado(notion)
+
+
+def test_informe_sin_poliza_procesado_dos_veces_no_duplica(monkeypatch):
+    monkeypatch.setattr(nr, "fetch_poliza", lambda pid, **k: (None, None))
+    notion = NotionFalso()
+    existe = {"valor": False}
+    monkeypatch.setattr(nr, "resolucion_existe", lambda informe_id, **k: existe["valor"])
+    nr.procesar_informe(notion, "res", _informe(), autofill=False)
+    existe["valor"] = True  # la segunda vez ya hay resolucion para ese informe
+    nr.procesar_informe(notion, "res", _informe(), autofill=False)
+    assert len(notion.creadas) == 1
+    assert _marcado_procesado(notion)
