@@ -27,7 +27,9 @@ def datos_ia(**cambios) -> ExtraccionInforme:
                 paciente_id="P001", medico="Dra. Ana Ríos",
                 documentos_aportados=["identificacion", "informe_medico", "consentimiento",
                                       "ecografia_abdominal", "analitica", "presupuesto_hospital"],
-                documentos_pendientes=[], evidencia=[], confianza=0.93)
+                documentos_pendientes=[], evidencia=[], confianza=0.93,
+                coherencia_diagnostico="coherente",
+                justificacion_coherencia="K80.2 justifica la colecistectomía.")
     return ExtraccionInforme(**{**base, **cambios})
 
 
