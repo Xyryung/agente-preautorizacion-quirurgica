@@ -161,9 +161,10 @@ def resolucion_existe(informe_id: str, dormir=time.sleep) -> bool:
 
 
 def _autofill(notion, pg, pr, pid: str):
+    """Rellena campos desde informe_texto. Devuelve el dict extraído (o None)."""
     txt = get_text(pr, E.INF_TEXTO)
     if not (txt and (not get_text(pr, E.INF_PROCEDIMIENTO) or not get_text(pr, E.INF_DOCUMENTOS))):
-        return
+        return None
     ext = extraer_desde_texto(txt)
     upd = {}
     if ext.get("paciente_id") and not get_text(pr, E.INF_PACIENTE_ID):
@@ -185,7 +186,7 @@ def _autofill(notion, pg, pr, pid: str):
         upd[E.INF_DOCUMENTOS] = {"multi_select": [{"name": d} for d in sorted(prev | set(ext["documentos"]))]}
         pr[E.INF_DOCUMENTOS] = {"multi_select": [{"name": d} for d in sorted(prev | set(ext["documentos"]))]}
     if not upd:
-        return
+        return ext
     if E.INF_PROCEDIMIENTO in upd: pr[E.INF_PROCEDIMIENTO] = {"select": {"name": ext["procedimiento"]}}
     try:
         con_reintentos(notion.pages.update, page_id=pg["id"], properties=upd)
@@ -196,14 +197,14 @@ def _autofill(notion, pg, pr, pid: str):
         try: con_reintentos(notion.pages.update, page_id=pg["id"], properties=upd)
         except APIResponseError as e2: print(f"{pid}: no se pudo rellenar: {e2}")
     print(f"{pid}: autofill -> {ext}")
+    return ext
 
 
 def procesar_informe(notion, ds_res: str, pg, autofill=True):
     """Procesa un informe: autofill, evaluar, crear resolucion y marcar estado."""
     pr = pg["properties"]
     pid = get_text(pr, E.INF_PACIENTE_ID)
-    if autofill:
-        _autofill(notion, pg, pr, pid)
+    ext = _autofill(notion, pg, pr, pid) if autofill else None
     pid = get_text(pr, E.INF_PACIENTE_ID) or pid
     pol, pol_id = fetch_poliza(pid)
     if not pol:
@@ -213,7 +214,10 @@ def procesar_informe(notion, ds_res: str, pg, autofill=True):
         get_text(pr, E.INF_DIAGNOSTICO), get_text(pr, E.INF_MEDICO),
         get_text(pr, E.INF_URGENCIA) or E.URG_PROGRAMADA,
         get_text(pr, E.INF_DOCUMENTOS) or [],
-        get_text(pr, E.INF_COSTO) or 0)
+        get_text(pr, E.INF_COSTO) or 0,
+        # 6b: la confianza y las citas solo viven en la extracción (sin columna Notion)
+        confianza=(ext or {}).get("confianza") or 1.0,
+        citas_no_encontradas=(ext or {}).get("citas_no_encontradas") or [])
     if resolucion_existe(pg["id"]):
         print(f"{pid}: resolucion ya existe, salto")
     else:

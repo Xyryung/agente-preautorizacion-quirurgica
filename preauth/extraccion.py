@@ -21,6 +21,7 @@ DOC_KEYWORDS = {"identificacion": ["dni", "identificacion", "cedula"], "informe_
     "segunda_opinion": ["segunda opinion"], "presupuesto_hospital": ["presupuesto", "costo", "€", "$"]}
 
 def extraer_desde_texto(texto: str) -> dict:
+    from preauth.reglas import DOCS_BASE, DOCS_POR_PROCEDIMIENTO
     t = norm(texto) 
     proc = next((p for p in PROCEDIMIENTOS_CONOCIDOS if norm(p) in t), "")
     m = CIE_RE.search(texto or "")
@@ -32,10 +33,15 @@ def extraer_desde_texto(texto: str) -> dict:
     costo = None
     if mc:
         costo = int(next(g for g in mc.groups() if g))
+    requeridos = DOCS_BASE + DOCS_POR_PROCEDIMIENTO.get(proc, DOCS_POR_PROCEDIMIENTO["default"])
     return {"procedimiento": proc, "cie": m.group(0) if m else "", "documentos": docs, "urgencia": urg,
             "paciente_id": mp.group(0) if mp else "",
             "medico": mm.group(0).strip() if mm else "",
-            "costo": costo}
+            "costo": costo,
+            # 6b: heuristica regex (el extractor IA la refina): sin procedimiento
+            # reconocible la confianza baja y todo lo requerido queda sin citar.
+            "confianza": 0.8 if proc else 0.3,
+            "citas_no_encontradas": sorted(set(requeridos) - set(docs))}
 
 SYSTEM = """Eres extractor de informes quirúrgicos. Devuelve SOLO JSON válido:
 {"procedimiento": str, "cie": str, "urgencia": "programada|emergencia", "documentos": [str], "costo_estimado": null}

@@ -102,3 +102,56 @@ def test_doble_ejecucion_no_duplica(monkeypatch):
     nr.run_once(autofill=False)
     nr.run_once(autofill=False)
     assert len(creadas) == 1
+
+
+def test_extraer_devuelve_confianza_y_citas():
+    from preauth.extraccion import extraer_desde_texto
+    ext = extraer_desde_texto("Paciente P001 con colecistectomía programada, DNI y consentimiento.")
+    assert ext["confianza"] == 0.8
+    assert "analitica" in ext["citas_no_encontradas"]
+    ext_vacio = extraer_desde_texto("texto sin datos relevantes 123")
+    assert ext_vacio["confianza"] == 0.3
+
+
+def test_autofill_pasa_confianza_a_informe(monkeypatch):
+    from preauth.reglas import InformeMedico
+    vistos = {}
+
+    class Pages:
+        def create(self, **kw):
+            return {"id": "res1"}
+
+        def update(self, **kw):
+            return {}
+
+    class DS:
+        def query(self, **kw):
+            f = kw.get("filter", {})
+            if f.get("property") == "estado":
+                return {"results": [{"id": "inf1", "properties": {}}], "has_more": False}
+            return {"results": [], "has_more": False}
+
+    class FakeClient:
+        data_sources = DS()
+        pages = Pages()
+
+    def fake_evaluar(pol, inf):
+        vistos["conf"] = inf.confianza
+        vistos["citas"] = inf.citas_no_encontradas
+        return {"decision": type("D", (), {"value": "PREAPROBADA"})(),
+                "motivo": "ok", "faltantes": [], "autorizacion_id": "AUT-X"}
+
+    monkeypatch.setattr(nr, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(nr, "data_sources_ids",
+                        lambda: {"informes": "a", "polizas": "b", "resoluciones": "c"})
+    monkeypatch.setattr(nr, "fetch_poliza", lambda pid, **k: (object(), "pol1"))
+    monkeypatch.setattr(nr, "evaluar", fake_evaluar)
+    monkeypatch.setattr(nr, "get_text", lambda pr, name: "P001" if "paciente" in name else "")
+    monkeypatch.setattr(nr, "_autofill",
+                        lambda *a, **k: {"confianza": 0.3, "citas_no_encontradas": ["analitica"]})
+
+    nr.run_once(autofill=True)
+    assert vistos["conf"] == 0.3
+    assert vistos["citas"] == ["analitica"]
+    # sin autofill, defaults del dataclass
+    assert InformeMedico("P", "X", "K", "M").confianza == 1.0
