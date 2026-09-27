@@ -9,6 +9,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -83,3 +84,8 @@ def llm_settings() -> LLMSettings:
         ollama_url=_opcional("OLLAMA_URL", "http://localhost:11434"),
         ollama_model=_opcional("OLLAMA_MODEL", "llama3.2:3b"),
     )
+
+@lru_cache(maxsize=1)
+def zona_horaria() -> ZoneInfo:
+    """Zona horaria del negocio (ZONA_HORARIA, por defecto America/Panama). Issue #44."""
+    raise NotImplementedError("issue #44")

@@ -5,7 +5,7 @@ Flujo: Notion DB (Informe Hospital + Póliza) -> Agente IA -> Decisión instant�
 import calendar
 import re
 from dataclasses import dataclass, field, replace
-from datetime import date
+from datetime import date, datetime
 from typing import List, Literal
 from enum import Enum
 from preauth.texto import norm
@@ -100,6 +100,10 @@ def _buscar(tabla: dict, clave: str, por_defecto):
         if norm(k) == objetivo:
             return v
     return por_defecto
+
+def hoy_local(ahora: datetime | None = None) -> date:
+    """Fecha de hoy en la zona horaria del negocio, no la del servidor (issue #44)."""
+    raise NotImplementedError("issue #44")
 
 def meses_afiliado(poliza: Poliza, hoy: date) -> int:
     """Meses COMPLETOS de afiliacion al dia 'hoy'. Nunca es negativo.
