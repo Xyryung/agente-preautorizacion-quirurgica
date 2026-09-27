@@ -64,11 +64,27 @@ def test_incoherente_va_a_revision_manual_con_la_justificacion():
     assert JUSTIFICACION in r["motivo"]
 
 
-@pytest.mark.parametrize("veredicto", ["coherente", "no_evaluable", None])
-def test_solo_incoherente_genera_hallazgo(veredicto):
+@pytest.mark.parametrize("veredicto", ["coherente", None])
+def test_coherente_o_sin_extraccion_no_genera_hallazgo(veredicto):
     r = evaluar(poliza(), informe(coherencia_diagnostico=veredicto), HOY)
     assert r["decision"] is Decision.PREAPROBADA
     assert hallazgos_de(r, "coherencia") == []
+
+
+def test_no_evaluable_sin_diagnostico_no_genera_hallazgo():
+    r = evaluar(poliza(), informe(coherencia_diagnostico="no_evaluable", diagnostico_cie10=""), HOY)
+    assert r["decision"] is Decision.PREAPROBADA
+    assert hallazgos_de(r, "coherencia") == []
+
+
+def test_no_evaluable_con_diagnostico_y_procedimiento_va_a_revision():
+    # Medido: el modelo respondio "no_evaluable" en S12 (H25.1 + artroplastia).
+    # Si habia con que evaluar y no evaluo, que lo revise una persona.
+    r = evaluar(poliza(), informe(coherencia_diagnostico="no_evaluable"), HOY)
+    assert r["decision"] is Decision.REVISION_MANUAL
+    [h] = hallazgos_de(r, "coherencia")
+    assert h.resultado is Resultado.REVISION
+    assert "Z41.1" in h.mensaje
 
 
 def test_la_coherencia_nunca_deniega():
