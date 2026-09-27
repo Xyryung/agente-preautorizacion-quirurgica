@@ -27,6 +27,12 @@ def test_health_no_cuenta_para_el_limite():
     assert all(client.get("/health").status_code == 200 for _ in range(30))
 
 
+def test_navegar_la_pagina_y_docs_no_gasta_cupo_de_la_api():
+    for ruta in ["/", "/docs", "/openapi.json", "/favicon.ico"] * 5:
+        client.get(ruta)
+    assert client.get("/api/demo").status_code == 200
+
+
 def test_ventana_deslizante_libera_tras_un_minuto():
     lim = proteccion.LimitadorPorIP()
     assert all(lim.permitir("ip", 3, ahora=t) for t in (0, 1, 2))

@@ -34,8 +34,9 @@ log = logging.getLogger("preauth.proteccion")
 MAX_CARACTERES_TEXTO = 8000
 MAX_BYTES_CUERPO = 32_000
 VENTANA_SEGUNDOS = 60
-# Rutas que no cuentan para el limite: Render consulta /health de forma periodica.
-RUTAS_SIN_LIMITE = {"/health"}
+# Solo se limita la API (lo que puede generar costos en OpenAI o escribir en
+# Notion). La pagina, /docs, /health y el favicon no gastan cupo.
+PREFIJO_LIMITADO = "/api/"
 
 TextoInforme = Annotated[str, Field(min_length=1, max_length=MAX_CARACTERES_TEXTO)]
 
@@ -104,7 +105,7 @@ def instalar(app: FastAPI) -> None:
                 content={"detail": f"Solicitud demasiado grande. El texto del informe admite "
                                    f"hasta {MAX_CARACTERES_TEXTO} caracteres."},
             )
-        if request.url.path not in RUTAS_SIN_LIMITE:
+        if request.url.path.startswith(PREFIJO_LIMITADO):
             if not limitador.permitir(ip_cliente(request), limite_por_minuto()):
                 return JSONResponse(
                     status_code=429,
