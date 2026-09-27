@@ -95,7 +95,7 @@ def test_doble_ejecucion_no_duplica(monkeypatch):
     monkeypatch.setattr(nr, "get_client", lambda: FakeClient())
     monkeypatch.setattr(nr, "data_sources_ids",
                         lambda: {"informes": "a", "polizas": "b", "resoluciones": "c"})
-    monkeypatch.setattr(nr, "fetch_poliza", lambda pid, **k: object())
+    monkeypatch.setattr(nr, "fetch_poliza", lambda pid, **k: (object(), None))
     monkeypatch.setattr(nr, "evaluar", lambda pol, inf: {
         "decision": type("D", (), {"value": "PREAPROBADA"})(),
         "motivo": "ok", "faltantes": [], "autorizacion_id": "AUT-X"})

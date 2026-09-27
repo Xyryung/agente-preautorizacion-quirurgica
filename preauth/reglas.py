@@ -2,7 +2,7 @@
 Agente de Pre-Autorización Quirúrgica en Tiempo Real
 Flujo: Notion DB (Informe Hospital + Póliza) -> Agente IA -> Decisión instantánea
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import List, Literal
 from enum import Enum
@@ -23,6 +23,7 @@ class Poliza:
     monto_usado: float = 0
     exclusiones: List[str] = field(default_factory=list)
     requiere_segunda_opinion: List[str] = field(default_factory=list)
+    monto_reservado: float = 0  # suma de costos pre-aprobados aún no liquidados (issue #15)
 
 @dataclass
 class InformeMedico:
@@ -78,8 +79,8 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) ->
                     "motivo": f"No cumple carencia: {antiguedad}/{carencia_req} meses.",
                     "faltantes": []}
 
-    # 3. Monto
-    if poliza.monto_usado + informe.costo_estimado > poliza.monto_maximo:
+    # 3. Monto (usado + reservado + estimado no puede superar el máximo)
+    if poliza.monto_usado + poliza.monto_reservado + informe.costo_estimado > poliza.monto_maximo:
         return {"decision": Decision.DENEGADA, "motivo": "Excede monto máximo de póliza.", "faltantes": []}
 
     # 4. Documentos
@@ -97,7 +98,17 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) ->
     return {"decision": Decision.PREAPROBADA,
             "motivo": "Cumple cobertura, carencia y documentación. Pre-aprobación emitida.",
             "faltantes": [],
-            "autorizacion_id": f"AUT-{informe.paciente_id}-{hoy.strftime('%Y%m%d')}"}
+            "autorizacion_id": f"AUT-{informe.paciente_id}-{hoy.strftime('%Y%m%d')}",
+            "monto_reservado": poliza.monto_reservado + informe.costo_estimado}
+
+
+def reservar(poliza: Poliza, costo_estimado: float) -> Poliza:
+    """Devuelve una póliza con el costo sumado al monto reservado (issue #15).
+
+    No muta la póliza original: el llamador persiste el nuevo total
+    (en Notion: `monto_usado` de la página de la póliza).
+    """
+    return replace(poliza, monto_reservado=poliza.monto_reservado + costo_estimado)
 
 # ---- Integración Notion: el esquema vive en preauth/esquema.py ----
 from preauth.esquema import INFORMES_PROPS, POLIZAS_PROPS, RESOLUCIONES_PROPS

@@ -123,15 +123,18 @@ def _poliza_desde_props(pid: str, pr: dict):
 
 
 def fetch_poliza(paciente_id: str, dormir=time.sleep):
-    """Consulta solo la poliza del paciente en lugar de cargarlas todas."""
+    """Consulta solo la poliza del paciente en lugar de cargarlas todas.
+
+    Devuelve (poliza, page_id) para poder persistir la reserva (issue #15).
+    """
     ds = data_sources_ids()["polizas"]
     pags = query_all(ds, dormir=dormir,
         filter={"property": E.POL_PACIENTE_ID, "title": {"equals": paciente_id}})
     for pg in pags:
         pol = _poliza_desde_props(paciente_id, pg["properties"])
         if pol:
-            return pol
-    return None
+            return pol, pg["id"]
+    return None, None
 
 
 def fetch_polizas(dormir=time.sleep):
@@ -202,7 +205,7 @@ def procesar_informe(notion, ds_res: str, pg, autofill=True):
     if autofill:
         _autofill(notion, pg, pr, pid)
     pid = get_text(pr, E.INF_PACIENTE_ID) or pid
-    pol = fetch_poliza(pid)
+    pol, pol_id = fetch_poliza(pid)
     if not pol:
         print(f"Sin póliza para {pid}")
         return
@@ -224,6 +227,12 @@ def procesar_informe(notion, ds_res: str, pg, autofill=True):
             E.RES_INFORME: {"relation": [{"id": pg["id"]}]},
         })
         print(f"{pid}/{inf.procedimiento} -> {r['decision'].value}")
+        if r["decision"].value == "PREAPROBADA" and pol_id:
+            # issue #15: reservar el monto en la póliza para que la
+            # siguiente evaluación lo tenga en cuenta
+            con_reintentos(notion.pages.update, page_id=pol_id, properties={
+                E.POL_MONTO_USADO: {"number": pol.monto_usado + inf.costo_estimado},
+            })
     con_reintentos(notion.pages.update, page_id=pg["id"],
         properties={E.INF_ESTADO: {"status": {"name": E.ESTADO_PROCESADO}}})
 
