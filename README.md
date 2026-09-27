@@ -2,14 +2,21 @@
 
 [![CI](https://github.com/Xyryung/agente-preautorizacion-quirurgica/actions/workflows/ci.yml/badge.svg)](https://github.com/Xyryung/agente-preautorizacion-quirurgica/actions/workflows/ci.yml)
 
-**Demo pública:** https://agente-preautorizacion.onrender.com (plan gratuito: la primera visita tras 15 min sin uso puede tardar ~1 min en despertar).
+**Demo pública:** https://agente-preautorizacion.onrender.com
 
-## Pruebas
+> Todos los datos de la demo son **sintéticos**. No ingreses datos reales de pacientes.
 
-```bash
-pip install -r requirements-dev.txt
-pytest
-```
+## Pruébalo en 2 minutos
+
+<!-- Actualizar cuando entre #9 (formulario para pegar un informe y POST /api/evaluar). -->
+
+1. Abre https://agente-preautorizacion.onrender.com. Si nadie la usó en un rato, la primera carga puede tardar ~30 s mientras el servidor gratuito despierta; después responde en menos de medio segundo.
+2. La página evalúa en vivo tres casos sintéticos y muestra para cada uno la **decisión**, el **motivo**, los **documentos faltantes** y la **latencia**:
+   - Documentación completa → `PREAPROBADA`
+   - Faltan documentos → `SOLICITUD_DOCUMENTOS_FALTANTES`
+   - Procedimiento no cubierto → `DENEGADA`
+3. El mismo resultado en JSON está en [`/api/demo`](https://agente-preautorizacion.onrender.com/api/demo).
+4. La documentación interactiva de la API está en [`/docs`](https://agente-preautorizacion.onrender.com/docs).
 
 ## 1. Resumen ejecutivo
 Sistema que elimina la espera de horas/días en la autorización de cirugías. Recibe el **informe médico digital (Hospital)** y la **póliza (Aseguradora)** desde **Notion**, los cruza con reglas de negocio y emite en segundos: `PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES` o `DENEGADA`.
@@ -93,22 +100,34 @@ Orden estricto, el primero que falla corta (fail-fast):
 Documentos base: `identificacion, informe_medico, consentimiento`.
 Por procedimiento: Colecistectomía exige `ecografia_abdominal + analitica`, Artroplastia exige `radiografia + segunda_opinion + analitica`, resto exige `presupuesto_hospital`.
 
-## 5. Instalación y uso
+## 5. Cómo ejecutar en local
+
+Requisitos: Python 3.14 (la misma versión que usan Render y CI) y Git.
 
 ```bash
-# 1. Requisitos
-pip install notion-client
+git clone https://github.com/Xyryung/agente-preautorizacion-quirurgica.git
+cd agente-preautorizacion-quirurgica
 
-# 2. Variables de entorno
-export NOTION_TOKEN="secret_xxx"
-export NOTION_DB_INFORMES="id_db_informes"
-export NOTION_DB_POLIZAS="id_db_polizas"
-export NOTION_DB_RESOLUCIONES="id_db_resoluciones"
+# Entorno virtual
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# 3. Prueba local (sin Notion)
-python -m preauth.reglas
-# Salida esperada: Caso 1 PREAPROBADA, Caso 2 FALTANTES, Caso 3 DENEGADA
+# Dependencias (versiones fijadas) + herramientas de pruebas
+pip install -r requirements-dev.txt
+
+# Variables de entorno: copia la plantilla y completa solo lo que vayas a usar.
+# La app arranca sin ninguna variable; cada grupo se valida cuando se usa.
+cp .env.example .env
 ```
+
+| Qué | Comando |
+|---|---|
+| Servicio web (página + API) | `uvicorn app.main:app --reload` → http://localhost:8000 |
+| Pruebas | `pytest` |
+| Motor de reglas con los casos de ejemplo, sin Notion | `python -m preauth.reglas` |
+| Un ciclo contra Notion (requiere las variables `NOTION_*`) | `python -m preauth.notion_repo` |
+
+El despliegue en Render (configuración, tiempos medidos y keep-alive) está documentado en [`docs/despliegue.md`](docs/despliegue.md).
 
 ### Integración Notion (pseudocódigo listo)
 ```python
@@ -133,10 +152,32 @@ resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
 | Carencia | 5 meses afiliado, exige 8 | `DENEGADA`, `No cumple carencia: 5/8 meses` |
 | Emergencia | Igual anterior pero `urgencia=emergencia` | Salta carencia, sigue a monto/documentos |
 
-## 7. Limitaciones y trabajo futuro
+## 7. Rendimiento medido
+
+Medido con `curl` desde Panamá contra el servicio en Render (detalle en [`docs/despliegue.md`](docs/despliegue.md)):
+
+| Escenario | Tiempo |
+|---|---|
+| Servicio despierto, n = 20 | p50 **0,28 s** · p95 **0,36 s** |
+| Motor de reglas (dentro del servidor) | < 0,05 ms por caso |
+| Arranque en frío (plan gratuito, tras 15 min sin tráfico) | 32,6 s, mitigado con un keep-alive cada 10 min |
+
+<!-- Agregar p50/p95 de la extracción con IA cuando entre #6. -->
+
+## 8. Datos sintéticos y privacidad
+
+- Todos los pacientes, pólizas e informes del repositorio, de Notion y de la demo son **ficticios**.
+- La información de salud es un **dato sensible** según la **Ley 81 de 2019 de protección de datos personales de Panamá** (reglamentada por el Decreto Ejecutivo 285 de 2021). Por eso la demo pública muestra un aviso y no debe recibir datos reales.
+- Un uso real requeriría, como mínimo: consentimiento del titular, cifrado en tránsito y en reposo, control de acceso, registro de auditoría y un acuerdo de tratamiento con cada proveedor externo (Notion, OpenAI).
+- Los secretos (tokens de Notion y OpenAI) viven solo en variables de entorno de Render, nunca en el repositorio.
+
+## 9. Limitaciones y trabajo futuro
 - Matching de `procedimiento` es por string exacto → normalizar a códigos CPT/CIE o usar embeddings/LLM para informe libre.
 - Sin OCR/PDF: hoy `documentos` es checklist; integrar OCR para verificar contenido real.
 - Sin autenticación, auditoría HIPAA/GDPR ni reintentos: añadir log inmutable, cifrado y cola con retries.
+- **Plan gratuito de Render:** 0,1 CPU y 512 MB; el servicio se duerme tras 15 min sin tráfico (keep-alive con GitHub Actions, que puede retrasarse unos minutos) y el disco es efímero, por eso el estado vive en Notion.
+- **Despliegue manual:** Render no despliega solo al hacer merge a `main`; hay que usar *Manual Deploy* (el CI ya puede llamar a un Deploy Hook si se configura el secret).
+- **Protección de la demo:** el límite de solicitudes por IP vive en memoria, así que se reinicia con cada deploy y solo sirve para una instancia.
 - Evolución IA: usar LLM solo para extraer `procedimiento/CIE/documentos` del informe en lenguaje natural, manteniendo las 4 reglas deterministas para la decisión (explicable y auditable).
 
 ## Herramientas de IA utilizadas
@@ -150,4 +191,4 @@ resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
 | Herramienta | Uso | Cómo se verificó |
 |---|---|---|
 | Claude (Anthropic) | Revisión de código, planificación del backlog, esqueleto del servicio web y script de issues | Pruebas locales, revisión en PR |
-| ... | ... | ... |
+| Claude (Anthropic) | Pruebas y CI con GitHub Actions, despliegue en Render, protección de la demo pública y este README | Tests en CI, prueba manual en local y contra el servicio en Render |
