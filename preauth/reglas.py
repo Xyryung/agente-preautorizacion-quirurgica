@@ -130,6 +130,21 @@ def _regla_datos(informe: InformeMedico) -> List[Hallazgo]:
                          "El informe no indica un procedimiento reconocible; requiere revisión manual.")]
     return []
 
+def _regla_extraccion(informe: InformeMedico) -> List[Hallazgo]:
+    """Senales de la extraccion automatica. Como maximo un hallazgo (ver issue #6b)."""
+    razones = []
+    c = informe.confianza_extraccion
+    if c is not None and c < UMBRAL_CONFIANZA:
+        razones.append(f"confianza baja ({c:.2f} < {UMBRAL_CONFIANZA:.2f})")
+    if informe.citas_no_encontradas:
+        citas = "; ".join(f"'{x}'" for x in informe.citas_no_encontradas[:3])
+        razones.append(f"citas que no aparecen en el informe: {citas}")
+    if razones:
+        return [Hallazgo("extraccion", Resultado.REVISION,
+                         "La extracción automática requiere revisión manual: "
+                         + "; ".join(razones) + ".")]
+    return []
+
 def _poliza_vigente(poliza: Poliza, hoy: date) -> bool:
     return poliza.fecha_inicio <= hoy
 
@@ -214,6 +229,7 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date | None = None) -> 
     faltantes = _documentos_faltantes(poliza, informe)
     hallazgos = (
         _regla_datos(informe)
+        + _regla_extraccion(informe)
         + _regla_vigencia(poliza, hoy)
         + _regla_cobertura(poliza, informe)
         + _regla_carencia(poliza, informe, hoy)

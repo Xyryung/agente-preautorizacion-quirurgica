@@ -151,8 +151,13 @@ def _extraer_con_regex(texto: str) -> ExtraccionInforme:
     )
 
 def citas_no_encontradas(datos: ExtraccionInforme, texto: str) -> list[str]:
-    """Citas de 'evidencia' que NO aparecen en el informe (se implementa en el siguiente commit)."""
-    raise NotImplementedError("issue #6b")
+    """Citas de 'evidencia' que NO aparecen en el informe (comparando con norm()).
+
+    Una cita inventada es senal de que el modelo invento datos (issue #6b).
+    """
+    t = norm(texto)
+    return [e.cita for e in datos.evidencia
+            if norm(e.cita.strip(' "\'.…«»“”')) not in t]
 
 def _normalizar(datos: ExtraccionInforme) -> ExtraccionInforme:
     return datos.model_copy(update={
@@ -181,7 +186,8 @@ def extraer(texto: str, *, proveedor: str | None = None, cliente=None) -> Result
             datos = _extraer_con_openai(texto, cliente or _cliente_openai(), cfg.openai_model,
                                         cfg.openai_reasoning_effort)
             ms = (time.perf_counter() - inicio) * 1000
-            return ResultadoExtraccion(_normalizar(datos), "openai", ms, None, advertencias)
+            return ResultadoExtraccion(_normalizar(datos), "openai", ms, None, advertencias,
+                                       tuple(citas_no_encontradas(datos, texto)))
         except Exception as e:  # respaldo deliberado: cualquier fallo de la IA usa regex
             error = f"{type(e).__name__}: {e}"[:300]
             logger.warning("Extraccion con OpenAI fallo, se usa regex: %s", error)
@@ -200,9 +206,8 @@ def extraer_desde_texto(texto: str, **opciones) -> dict:
     Incluye `confianza` y `citas_no_encontradas` para el 6b (van al
     InformeMedico en memoria, sin columna en Notion).
     """
-    from preauth.reglas import DOCS_BASE, DOCS_POR_PROCEDIMIENTO
-    d = extraer(texto, **opciones).datos
-    requeridos = DOCS_BASE + DOCS_POR_PROCEDIMIENTO.get(d.procedimiento, DOCS_POR_PROCEDIMIENTO["default"])
+    r = extraer(texto, **opciones)
+    d = r.datos
     return {
         "procedimiento": "" if d.procedimiento == DESCONOCIDO else d.procedimiento,
         "cie": d.cie10 or "",
@@ -211,8 +216,8 @@ def extraer_desde_texto(texto: str, **opciones) -> dict:
         "paciente_id": d.paciente_id or "",
         "medico": d.medico or "",
         "costo": d.costo_estimado,
-        "confianza": d.confianza,
-        "citas_no_encontradas": sorted(set(requeridos) - set(d.documentos_aportados)),
+        "confianza": d.confianza,                                   # issue #6b
+        "citas_no_encontradas": list(r.citas_no_encontradas),       # issue #6b
     }
 
 

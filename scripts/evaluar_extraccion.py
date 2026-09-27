@@ -13,8 +13,7 @@ import statistics
 from pathlib import Path
 
 from preauth.config import llm_settings
-from preauth.extraccion import extraer
-from preauth.texto import norm
+from preauth.extraccion import citas_no_encontradas, extraer
 
 DATOS = Path(__file__).resolve().parent.parent / "tests" / "data" / "informes_sinteticos.json"
 CAMPOS = ["procedimiento", "urgencia", "costo_estimado", "cie10", "documentos_aportados"]
@@ -31,11 +30,6 @@ def coincide(campo: str, obtenido, esperado) -> bool:
         return set(obtenido) == set(esperado)
     return obtenido == esperado
 
-def citas_no_encontradas(datos, texto: str) -> list[str]:
-    """Citas de 'evidencia' que NO aparecen en el informe (comparando con norm())."""
-    t = norm(texto)
-    return [e.cita for e in datos.evidencia
-            if norm(e.cita.strip(' "\'.…«»“”')) not in t]
 
 def percentil(valores: list[float], p: int) -> float:
     if len(valores) < 2:
