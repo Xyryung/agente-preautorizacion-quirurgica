@@ -25,9 +25,9 @@ def test_api_demo_incluye_campos_esperados():
         assert caso["latencia_ms"] >= 0
 
 
-def test_pagina_principal_muestra_resultados():
+def test_pagina_principal_muestra_el_formulario():
     r = client.get("/")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
-    assert "PREAPROBADA" in r.text
-    assert "__FILAS__" not in r.text
+    assert 'id="formulario"' in r.text
+    assert "/api/evaluar" in r.text
