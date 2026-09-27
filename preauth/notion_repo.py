@@ -13,7 +13,7 @@ from notion_client.errors import APIResponseError
 from preauth.config import notion_settings
 from preauth import esquema as E
 from preauth.extraccion import extraer_desde_texto
-from preauth.reglas import InformeMedico, Poliza, evaluar
+from preauth.reglas import Decision, InformeMedico, Poliza, evaluar
 
 
 @lru_cache(maxsize=1)
@@ -132,10 +132,17 @@ def fetch_poliza(paciente_id: str, dormir=time.sleep):
 
     Devuelve (poliza, page_id) para poder persistir la reserva (issue #15).
     """
+    paciente_id = (paciente_id or "").strip()
+    if not paciente_id:
+        # Notion devuelve TODAS las polizas al filtrar un titulo vacio (#43).
+        return None, None
     ds = data_sources_ids()["polizas"]
     pags = query_all(ds, dormir=dormir,
         filter={"property": E.POL_PACIENTE_ID, "title": {"equals": paciente_id}})
     for pg in pags:
+        # Defensa: nunca evaluar con la poliza de otro paciente.
+        if get_text(pg["properties"], E.POL_PACIENTE_ID).strip() != paciente_id:
+            continue
         pol = _poliza_desde_props(paciente_id, pg["properties"])
         if pol:
             return pol, pg["id"]
@@ -203,15 +210,48 @@ def _autofill(notion, pg, pr, pid: str):
     return ext
 
 
+def _crear_resolucion(notion, ds_res: str, pg, pid: str, decision: str, motivo: str,
+                      faltantes=(), autorizacion_id: str = "-"):
+    con_reintentos(notion.pages.create, parent={"data_source_id": ds_res}, properties={
+        E.RES_PACIENTE_ID: {"title": [{"text": {"content": pid or "(sin paciente)"}}]},
+        E.RES_DECISION: {"select": {"name": decision}},
+        E.RES_MOTIVO: {"rich_text": [{"text": {"content": motivo[:2000]}}]},
+        E.RES_FALTANTES: {"multi_select": [{"name": f} for f in faltantes]},
+        E.RES_AUTORIZACION: {"rich_text": [{"text": {"content": autorizacion_id}}]},
+        E.RES_INFORME: {"relation": [{"id": pg["id"]}]},
+    })
+
+
+def _marcar_procesado(notion, pg):
+    con_reintentos(notion.pages.update, page_id=pg["id"],
+        properties={E.INF_ESTADO: {"status": {"name": E.ESTADO_PROCESADO}}})
+
+
+def _revision_sin_evaluar(notion, ds_res: str, pg, pid: str, motivo: str):
+    """Issue #43: sin paciente o sin poliza no hay que evaluar, pero el hospital
+    recibe respuesta y el informe no queda pendiente para siempre."""
+    if resolucion_existe(pg["id"]):
+        print(f"{pid or pg['id']}: resolucion ya existe, salto")
+    else:
+        _crear_resolucion(notion, ds_res, pg, pid, Decision.REVISION_MANUAL.value, motivo)
+        print(f"{pid or pg['id']} -> REVISION_MANUAL ({motivo})")
+    _marcar_procesado(notion, pg)
+
+
 def procesar_informe(notion, ds_res: str, pg, autofill=True):
     """Procesa un informe: autofill, evaluar, crear resolucion y marcar estado."""
     pr = pg["properties"]
     pid = get_text(pr, E.INF_PACIENTE_ID)
     ext = _autofill(notion, pg, pr, pid) if autofill else None
-    pid = get_text(pr, E.INF_PACIENTE_ID) or pid
+    pid = (get_text(pr, E.INF_PACIENTE_ID) or pid).strip()
+    if not pid:
+        _revision_sin_evaluar(notion, ds_res, pg, "",
+                              "El informe no identifica al paciente; requiere revisión manual.")
+        return
     pol, pol_id = fetch_poliza(pid)
     if not pol:
-        print(f"Sin póliza para {pid}")
+        _revision_sin_evaluar(notion, ds_res, pg, pid,
+                              f"No se encontró póliza para {pid}; requiere revisión manual.")
         return
     inf = InformeMedico(pid, get_text(pr, E.INF_PROCEDIMIENTO),
         get_text(pr, E.INF_DIAGNOSTICO), get_text(pr, E.INF_MEDICO),
@@ -228,14 +268,8 @@ def procesar_informe(notion, ds_res: str, pg, autofill=True):
         print(f"{pid}: resolucion ya existe, salto")
     else:
         r = evaluar(pol, inf)
-        con_reintentos(notion.pages.create, parent={"data_source_id": ds_res}, properties={
-            E.RES_PACIENTE_ID: {"title": [{"text": {"content": pid}}]},
-            E.RES_DECISION: {"select": {"name": r["decision"].value}},
-            E.RES_MOTIVO: {"rich_text": [{"text": {"content": r["motivo"][:2000]}}]},
-            E.RES_FALTANTES: {"multi_select": [{"name": f} for f in r["faltantes"]]},
-            E.RES_AUTORIZACION: {"rich_text": [{"text": {"content": r.get("autorizacion_id", "-")}}]},
-            E.RES_INFORME: {"relation": [{"id": pg["id"]}]},
-        })
+        _crear_resolucion(notion, ds_res, pg, pid, r["decision"].value, r["motivo"],
+                          r["faltantes"], r.get("autorizacion_id", "-"))
         print(f"{pid}/{inf.procedimiento} -> {r['decision'].value}")
         if r["decision"].value == "PREAPROBADA" and pol_id:
             # issue #15: reservar el monto en la póliza para que la
@@ -243,8 +277,7 @@ def procesar_informe(notion, ds_res: str, pg, autofill=True):
             con_reintentos(notion.pages.update, page_id=pol_id, properties={
                 E.POL_MONTO_USADO: {"number": pol.monto_usado + inf.costo_estimado},
             })
-    con_reintentos(notion.pages.update, page_id=pg["id"],
-        properties={E.INF_ESTADO: {"status": {"name": E.ESTADO_PROCESADO}}})
+    _marcar_procesado(notion, pg)
 
 
 def run_once(autofill=True):
