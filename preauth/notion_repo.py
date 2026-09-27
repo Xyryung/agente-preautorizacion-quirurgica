@@ -218,9 +218,9 @@ def procesar_informe(notion, ds_res: str, pg, autofill=True):
         get_text(pr, E.INF_URGENCIA) or E.URG_PROGRAMADA,
         get_text(pr, E.INF_DOCUMENTOS) or [],
         get_text(pr, E.INF_COSTO) or 0,
-        # 6b: la confianza y las citas solo viven en la extracción (sin columna Notion)
-        confianza=(ext or {}).get("confianza") or 1.0,
-        citas_no_encontradas=(ext or {}).get("citas_no_encontradas") or [])
+        # 6b/#33: la confianza y las citas solo viven en la extracción (sin columna Notion)
+        confianza_extraccion=ext["confianza"] if ext is not None else 1.0,
+        citas_no_encontradas=ext["citas_no_encontradas"] if ext is not None else [])
     if resolucion_existe(pg["id"]):
         print(f"{pid}: resolucion ya existe, salto")
     else:
