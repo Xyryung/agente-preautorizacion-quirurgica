@@ -2,7 +2,7 @@
 Agente de Pre-Autorización Quirúrgica en Tiempo Real
 Flujo: Notion DB (Informe Hospital + Póliza) -> Agente IA -> Decisión instantánea
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import List, Literal
 from enum import Enum
@@ -57,6 +57,7 @@ class Poliza:
     monto_usado: float = 0
     exclusiones: List[str] = field(default_factory=list)
     requiere_segunda_opinion: List[str] = field(default_factory=list)
+    monto_reservado: float = 0  # suma de costos pre-aprobados aún no liquidados (issue #15)
 
 @dataclass
 class InformeMedico:
@@ -141,7 +142,7 @@ def _regla_monto(poliza: Poliza, informe: InformeMedico) -> List[Hallazgo]:
     if informe.costo_estimado <= 0:
         return [Hallazgo("monto", Resultado.FALTAN_DOCUMENTOS,
                          "Falta el costo estimado; se requiere el presupuesto del hospital.")]
-    if poliza.monto_usado + informe.costo_estimado > poliza.monto_maximo:
+    if poliza.monto_usado + poliza.monto_reservado + informe.costo_estimado > poliza.monto_maximo:
         return [Hallazgo("monto", Resultado.NO_CUMPLE, "Excede monto máximo de póliza.")]
     return [Hallazgo("monto", Resultado.CUMPLE, "Dentro del monto disponible de la póliza.")]
 
@@ -161,7 +162,6 @@ def _regla_documentos(faltantes: List[str]) -> List[Hallazgo]:
     if faltantes:
         return [Hallazgo("documentos", Resultado.FALTAN_DOCUMENTOS, "Faltan documentos para pre-aprobar.")]
     return [Hallazgo("documentos", Resultado.CUMPLE, "Documentación completa.")]
-
 
 def _motivo(decision: Decision, hallazgos: List[Hallazgo]) -> str:
     principales = [h.mensaje for h in hallazgos if h.resultado in RESULTADOS_DEL_MOTIVO[decision]]
@@ -196,7 +196,17 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) ->
     }
     if decision is Decision.PREAPROBADA:
         resultado["autorizacion_id"] = f"AUT-{informe.paciente_id}-{hoy.strftime('%Y%m%d')}"
+        resultado["monto_reservado"] = poliza.monto_reservado + informe.costo_estimado
     return resultado
+
+
+def reservar(poliza: Poliza, costo_estimado: float) -> Poliza:
+    """Devuelve una póliza con el costo sumado al monto reservado (issue #15).
+
+    No muta la póliza original: el llamador persiste el nuevo total
+    (en Notion: `monto_usado` de la página de la póliza).
+    """
+    return replace(poliza, monto_reservado=poliza.monto_reservado + costo_estimado)
 
 # ---- Integración Notion: el esquema vive en preauth/esquema.py ----
 from preauth.esquema import INFORMES_PROPS, POLIZAS_PROPS, RESOLUCIONES_PROPS
