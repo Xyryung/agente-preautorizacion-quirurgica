@@ -127,3 +127,16 @@ resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
 - Sin OCR/PDF: hoy `documentos` es checklist; integrar OCR para verificar contenido real.
 - Sin autenticación, auditoría HIPAA/GDPR ni reintentos: añadir log inmutable, cifrado y cola con retries.
 - Evolución IA: usar LLM solo para extraer `procedimiento/CIE/documentos` del informe en lenguaje natural, manteniendo las 4 reglas deterministas para la decisión (explicable y auditable).
+
+## Herramientas de IA utilizadas
+
+### En el producto
+| Herramienta | Uso |
+|---|---|
+| OpenAI API (modelo configurado en OPENAI_MODEL) | Extracción estructurada del informe médico y verificación de coherencia diagnóstico-procedimiento. La IA extrae; las reglas deterministas deciden. |
+
+### En el desarrollo
+| Herramienta | Uso | Cómo se verificó |
+|---|---|---|
+| Claude (Anthropic) | Revisión de código, planificación del backlog, esqueleto del servicio web y script de issues | Pruebas locales, revisión en PR |
+| ... | ... | ... |
