@@ -110,8 +110,7 @@ def test_extraer_devuelve_confianza_y_citas():
         "Paciente P001 con colecistectomía programada, DNI y consentimiento.",
         proveedor="regex")
     assert ext["confianza"] == 0.0  # el regex no se autoevalua
-    assert "analitica" in ext["citas_no_encontradas"]
-    assert "identificacion" not in ext["citas_no_encontradas"]
+    assert ext["citas_no_encontradas"] == []  # sin IA no hay evidencia que verificar
 
 
 def test_autofill_pasa_confianza_a_informe(monkeypatch):
@@ -149,13 +148,13 @@ def test_autofill_pasa_confianza_a_informe(monkeypatch):
     monkeypatch.setattr(nr, "evaluar", fake_evaluar)
     monkeypatch.setattr(nr, "get_text", lambda pr, name: "P001" if "paciente" in name else "")
     monkeypatch.setattr(nr, "_autofill",
-                        lambda *a, **k: {"confianza": 0.3, "citas_no_encontradas": ["analitica"]})
+                        lambda *a, **k: {"confianza": 0.3, "citas_no_encontradas": ["texto inventado"]})
 
     nr.run_once(autofill=True)
     assert vistos["conf"] == 0.3
-    assert vistos["citas"] == ["analitica"]
+    assert vistos["citas"] == ["texto inventado"]
     # sin autofill, defaults del dataclass
-    assert InformeMedico("P", "X", "K", "M").confianza_extraccion == 1.0
+    assert InformeMedico("P", "X", "K", "M").confianza_extraccion is None
 
 
 def test_autofill_evalua_con_los_datos_extraidos_del_texto(monkeypatch):
@@ -191,6 +190,13 @@ def test_autofill_evalua_con_los_datos_extraidos_del_texto(monkeypatch):
     monkeypatch.setattr(nr, "resolucion_existe", lambda page_id: False)
     monkeypatch.setattr(nr, "evaluar", lambda pol, inf: evaluados.append(inf) or evaluar_real(pol, inf))
 
+        # En pruebas la extraccion usa regex (confianza 0.0), que 6b envia a revision manual.
+    # Esta prueba verifica que la decision use lo extraido, asi que simula una extraccion
+    # con confianza de IA; el caso de confianza 0.0 se prueba aparte.
+    extraer_real = nr.extraer_desde_texto
+    monkeypatch.setattr(nr, "extraer_desde_texto",
+                        lambda texto: {**extraer_real(texto), "confianza": 0.95})
+    
     nr.procesar_informe(FakeClient(), "res", pg)
 
     inf = evaluados[0]
@@ -250,4 +256,4 @@ def test_confianza_cero_no_se_enmascara_y_manual_usa_defaults(monkeypatch):
 
     monkeypatch.setattr(nr, "_autofill", lambda *a, **k: None)
     nr.run_once(autofill=True)
-    assert vistos[-1] == (1.0, [])
+    assert vistos[-1] == (None, [])

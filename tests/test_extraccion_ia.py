@@ -169,3 +169,12 @@ def test_compatibilidad_deja_vacios_los_valores_sin_dato():
     d = extraer_desde_texto("Paciente P009. Se envía documentación.")
     assert d["procedimiento"] == ""
     assert d["urgencia"] == ""
+
+def test_citas_no_encontradas_no_son_documentos_faltantes():
+    # Todas las citas estan en el texto; faltan documentos requeridos.
+    # 'citas_no_encontradas' debe quedar vacio: los faltantes los calcula reglas.py.
+    salida = extraccion(evidencia=[{"campo": "procedimiento", "cita": "Colecistectomía programada"}],
+                        documentos_aportados=["analitica"])
+    d = extraer_desde_texto(TEXTO, proveedor="openai", cliente=ClienteFalso(salida=salida))
+    assert d["citas_no_encontradas"] == []
+    
