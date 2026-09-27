@@ -153,7 +153,8 @@ def test_compatibilidad_mantiene_las_claves_del_diccionario():
     # Claves de siempre + las dos de #6b (confianza y citas no encontradas).
     assert set(d) == {"procedimiento", "cie", "documentos", "urgencia",
                       "paciente_id", "medico", "costo",
-                      "confianza", "citas_no_encontradas"}
+                      "confianza", "citas_no_encontradas",
+                      "coherencia", "justificacion_coherencia"}
 
 
 def test_compatibilidad_traduce_la_salida_del_modelo():
