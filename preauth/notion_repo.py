@@ -223,7 +223,8 @@ def procesar_informe(notion, ds_res: str, pg, autofill=True):
         citas_no_encontradas=ext["citas_no_encontradas"] if ext is not None else [],
         # #7: veredicto de coherencia de la IA; .get() tolera extracciones sin estas claves
         coherencia_diagnostico=ext.get("coherencia") if ext is not None else None,
-        justificacion_coherencia=ext.get("justificacion_coherencia", "") if ext is not None else "")
+        justificacion_coherencia=ext.get("justificacion_coherencia", "") if ext is not None else "",
+        procedimiento_regex=ext.get("procedimiento_regex") or None if ext is not None else None)
     if resolucion_existe(pg["id"]):
         print(f"{pid}: resolucion ya existe, salto")
     else:

@@ -121,7 +121,8 @@ def obtener_extractor():
     return extraer
 
 
-def informe_desde_extraccion(datos: ExtraccionInforme, paciente_id: str) -> InformeMedico:
+def informe_desde_extraccion(datos: ExtraccionInforme, paciente_id: str,
+                             procedimiento_regex: str | None = None) -> InformeMedico:
     """Contrato de #6: convierte lo que extrae la IA en la entrada de las reglas."""
     return InformeMedico(
         paciente_id=paciente_id,
@@ -131,6 +132,7 @@ def informe_desde_extraccion(datos: ExtraccionInforme, paciente_id: str) -> Info
         urgencia="programada" if datos.urgencia == NO_INDICADA else datos.urgencia,
         documentos_adjuntos=list(datos.documentos_aportados),
         costo_estimado=datos.costo_estimado or 0,  # sin costo, la regla de monto pide presupuesto
+        procedimiento_regex=procedimiento_regex,
     )
 
 
@@ -160,7 +162,7 @@ def api_evaluar(solicitud: SolicitudEvaluar, extractor=Depends(obtener_extractor
             proveedor=r.proveedor, respaldo=r.error is not None, confianza=r.datos.confianza,
             datos=r.datos, advertencias=list(r.advertencias),
         )
-        informe = informe_desde_extraccion(r.datos, poliza_id)
+        informe = informe_desde_extraccion(r.datos, poliza_id, r.procedimiento_regex)
     else:
         informe = InformeMedico(paciente_id=poliza_id, **solicitud.informe.model_dump())
     fin_extraccion = time.perf_counter()
