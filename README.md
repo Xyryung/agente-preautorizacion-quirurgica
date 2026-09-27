@@ -84,11 +84,14 @@ Nombres y tipos según `preauth/esquema.py` (única fuente de verdad, snake_case
 | Propiedad | Tipo | Descripción |
 |---|---|---|
 | paciente_id | Title | Enlace al paciente |
-| decision | Select (3 valores) | Resultado del agente |
+| decision | Select (4 valores: `PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES`, `DENEGADA`, `REVISION_MANUAL`*) | Resultado del agente |
 | motivo | Rich text | Explicación legible |
 | faltantes | Multi-select | Docs a pedir |
 | autorizacion_id | Rich text | `AUT-P001-20260926`, solo si aprobada |
 | timestamp | Created time | Auditoría |
+| informe | Relation → Informes_Hospital | Idempotencia: una resolución por informe |
+
+\* `REVISION_MANUAL` la emite el motor acumulado del issue #5 (en PR); el resto ya las devuelve `evaluar()`.
 
 ## 4. Motor de reglas (`evaluar()` en `preauth/reglas.py`)
 
@@ -96,7 +99,7 @@ Orden estricto, el primero que falla corta (fail-fast):
 
 1. **Cobertura**: ¿`procedimiento` está en `cobertura_procedimientos` y no en `exclusiones`? Si no → `DENEGADA`.
 2. **Carencia**: `meses_afiliado = (hoy - fecha_inicio) en meses`. Si `urgencia != emergencia` y `antigüedad < carencia_req` → `DENEGADA`. Ej: póliza exige 8 meses, paciente lleva 5 → denegada.
-3. **Monto**: si `monto_usado + costo_estimado > monto_maximo` → `DENEGADA`.
+3. **Monto**: si `monto_usado + monto_reservado + costo_estimado > monto_maximo` → `DENEGADA`. Al pre-aprobar se suma el costo a `monto_usado` de la póliza (#15).
 4. **Documentos**: `requeridos = DOCS_BASE + DOCS_POR_PROCEDIMIENTO + segunda_opinion si aplica`. `faltantes = requeridos - adjuntos`. Si hay faltantes → `SOLICITUD_DOCUMENTOS_FALTANTES`, si no → `PREAPROBADA`.
 
 Documentos base: `identificacion, informe_medico, consentimiento`.

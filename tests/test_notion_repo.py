@@ -1,8 +1,6 @@
 """Issue #8: paginacion, reintentos 429 e idempotencia (todo con dobles, sin red)."""
 import pytest
 
-from notion_client.errors import APIResponseError
-
 import preauth.notion_repo as nr
 
 
@@ -23,9 +21,7 @@ class Fake400(Exception):
 
 
 # los reintentos solo dependen de .status/.response, no de la clase real
-import preauth.notion_repo as _nr_mod
-_orig_es_429 = _nr_mod._es_429
-_nr_mod._es_429 = lambda err: getattr(err, "status", None) == 429
+nr._es_429 = lambda err: getattr(err, "status", None) == 429
 
 
 def test_query_all_pagina_150_en_dos_paginas(monkeypatch):
