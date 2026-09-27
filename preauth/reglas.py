@@ -149,8 +149,17 @@ def _regla_extraccion(informe: InformeMedico) -> List[Hallazgo]:
     return []
 
 def _regla_coherencia(informe: InformeMedico) -> List[Hallazgo]:
-    """Se implementa en el siguiente commit (issue #7)."""
-    return []
+    """Coherencia diagnostico-procedimiento segun la IA (issue #7).
+
+    Solo "incoherente" genera un hallazgo, y siempre de REVISION: un juicio clinico
+    del modelo puede enviar el caso a una persona, nunca denegarlo.
+    """
+    if norm(informe.coherencia_diagnostico or "") != "incoherente":
+        return []
+    justificacion = informe.justificacion_coherencia.strip() or "sin justificación"
+    return [Hallazgo("coherencia", Resultado.REVISION,
+                     f"El diagnóstico no parece justificar el procedimiento ({justificacion}); "
+                     "requiere revisión manual.")]
 
 def _poliza_vigente(poliza: Poliza, hoy: date) -> bool:
     return poliza.fecha_inicio <= hoy
@@ -237,6 +246,7 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date | None = None) -> 
     hallazgos = (
         _regla_datos(informe)
         + _regla_extraccion(informe)
+        + _regla_coherencia(informe)
         + _regla_vigencia(poliza, hoy)
         + _regla_cobertura(poliza, informe)
         + _regla_carencia(poliza, informe, hoy)
