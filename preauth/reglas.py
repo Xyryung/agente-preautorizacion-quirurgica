@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import List, Literal
 from enum import Enum
+from preauth.texto import norm
 
 class Decision(str, Enum):
     PREAPROBADA = "PREAPROBADA"
@@ -41,6 +42,20 @@ DOCS_POR_PROCEDIMIENTO = {
     "default": ["presupuesto_hospital"],
 }
 
+def _contiene(lista: List[str], valor: str) -> bool:
+    """True si 'valor' esta en 'lista', comparando con norm()."""
+    objetivo = norm(valor)
+    return any(norm(elemento) == objetivo for elemento in lista)
+
+
+def _buscar(tabla: dict, clave: str, por_defecto):
+    """Como tabla.get(clave, por_defecto), comparando las claves con norm()."""
+    objetivo = norm(clave)
+    for k, v in tabla.items():
+        if norm(k) == objetivo:
+            return v
+    return por_defecto
+
 def meses_afiliado(poliza: Poliza, hoy: date) -> int:
     return (hoy.year - poliza.fecha_inicio.year) * 12 + (hoy.month - poliza.fecha_inicio.month)
 
@@ -48,14 +63,15 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) ->
     faltantes, motivos = [], []
 
     # 1. Cobertura
-    if informe.procedimiento not in poliza.cobertura_procedimientos:
+    if not _contiene(poliza.cobertura_procedimientos, informe.procedimiento):
         return {"decision": Decision.DENEGADA, "motivo": f"Procedimiento '{informe.procedimiento}' no cubierto por póliza.", "faltantes": []}
-    if informe.procedimiento in poliza.exclusiones:
+    if _contiene(poliza.exclusiones, informe.procedimiento):
         return {"decision": Decision.DENEGADA, "motivo": "Procedimiento en lista de exclusiones.", "faltantes": []}
 
     # 2. Carencia (se omite en emergencia)
-    if informe.urgencia != "emergencia":
-        carencia_req = poliza.carencia_meses.get(informe.procedimiento, poliza.carencia_meses.get("default", 0))
+    if norm(informe.urgencia) != "emergencia":
+        carencia_req = _buscar(poliza.carencia_meses, informe.procedimiento,
+                       _buscar(poliza.carencia_meses, "default", 0))
         antiguedad = meses_afiliado(poliza, hoy)
         if antiguedad < carencia_req:
             return {"decision": Decision.DENEGADA,
@@ -67,10 +83,11 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) ->
         return {"decision": Decision.DENEGADA, "motivo": "Excede monto máximo de póliza.", "faltantes": []}
 
     # 4. Documentos
-    requeridos = set(DOCS_BASE + DOCS_POR_PROCEDIMIENTO.get(informe.procedimiento, DOCS_POR_PROCEDIMIENTO["default"]))
-    if informe.procedimiento in poliza.requiere_segunda_opinion:
+    requeridos = set(DOCS_BASE + _buscar(DOCS_POR_PROCEDIMIENTO, informe.procedimiento, DOCS_POR_PROCEDIMIENTO["default"]))
+    if _contiene(poliza.requiere_segunda_opinion, informe.procedimiento):
         requeridos.add("segunda_opinion")
-    faltantes = [d for d in requeridos if d not in informe.documentos_adjuntos]
+    adjuntos = {norm(d) for d in informe.documentos_adjuntos}
+    faltantes = [d for d in requeridos if norm(d) not in adjuntos]
 
     if faltantes:
         return {"decision": Decision.DOCUMENTOS_FALTANTES,
