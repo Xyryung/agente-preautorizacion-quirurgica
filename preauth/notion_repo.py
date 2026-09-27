@@ -9,6 +9,7 @@ from functools import lru_cache
 from notion_client import Client
 
 from preauth.config import notion_settings
+from preauth import esquema as E
 from preauth.extraccion import extraer_desde_texto
 from preauth.reglas import InformeMedico, Poliza, evaluar
 
@@ -41,35 +42,28 @@ def q(db, **kw):
             raise
         return notion.data_sources.query(data_source_id=ds[0]["id"], **kw)
 
-def get2(pr, *names):
-    for n in names:
-        v = get_text(pr, n)
-        if v or v == 0:
-            return v
-    return ""
-
 def fetch_polizas():
     res = q(notion_settings().db_polizas)
     out = {}
     for pg in res["results"]:
         pr = pg["properties"]
-        pid = get2(pr, "paciente_id")
+        pid = get_text(pr, E.POL_PACIENTE_ID)
         if not pid:
             print(f"Fila sin paciente_id, salto. Props: {list(pr.keys())}")
             continue
-        car_raw = get2(pr, "carencia", "carencia ") or '{"default":0}'
+        car_raw = get_text(pr, E.POL_CARENCIA) or '{"default":0}'
         try: car = json.loads(car_raw)
         except: car = {"default": 0}
-        fstr = get2(pr, "fecha_inicio")
+        fstr = get_text(pr, E.POL_FECHA_INICIO)
         if not fstr:
             print(f"{pid}: fecha_inicio vacía. Props: {list(pr.keys())}")
             continue
-        out[pid] = Poliza(pid, get2(pr, "cobertura") or [],
+        out[pid] = Poliza(pid, get_text(pr, E.POL_COBERTURA) or [],
             date.fromisoformat(str(fstr)[:10]),
-            car, get2(pr, "monto maximo", "monto_maximo") or 0,
-            get2(pr, "monto usado", "monto_usado") or 0,
-            get2(pr, "exclusiones") or [],
-            get2(pr, "requiere_segunda_opinion") or [])
+            car, get_text(pr, E.POL_MONTO_MAX) or 0,
+            get_text(pr, E.POL_MONTO_USADO) or 0,
+            get_text(pr, E.POL_EXCLUSIONES) or [],
+            get_text(pr, E.POL_SEGUNDA_OPINION) or [])
     return out
 
 def run_once(autofill=True):
@@ -77,63 +71,63 @@ def run_once(autofill=True):
     cfg = notion_settings()
     polizas = fetch_polizas()
     pend = q(cfg.db_informes,
-        filter={"property": "estado", "status": {"equals": "pendiente"}})
+        filter={"property": E.INF_ESTADO, "status": {"equals": E.ESTADO_PENDIENTE}})
     for pg in pend["results"]:
         pr = pg["properties"]
-        pid = get_text(pr, "paciente_id")
+        pid = get_text(pr, E.INF_PACIENTE_ID)
         # --- AUTOFILL: si hay informe_texto y faltan campos, extraer y rellenar ---
         if autofill:
-            txt = get_text(pr, "informe_texto")
-            if txt and (not get_text(pr, "procedimiento") or not get_text(pr, "documentos")):
+            txt = get_text(pr, E.INF_TEXTO)
+            if txt and (not get_text(pr, E.INF_PROCEDIMIENTO) or not get_text(pr, E.INF_DOCUMENTOS)):
                 ext = extraer_desde_texto(txt)
                 upd = {}
-                if ext.get("paciente_id") and not get_text(pr, "paciente_id"):
-                    upd["paciente_id"] = {"title": [{"text": {"content": ext["paciente_id"]}}]}
-                    pr["paciente_id"] = {"title": [{"text": {"content": ext["paciente_id"]}}]}
-                if ext.get("medico") and not get_text(pr, "medico"):
-                    upd["medico"] = {"rich_text": [{"text": {"content": ext["medico"]}}]}
-                if ext.get("costo") and not get_text(pr, "costo estimado"):
-                    upd["costo estimado"] = {"number": ext["costo"]}
-                if ext.get("urgencia") and not get_text(pr, "urgencia"):
-                    upd["urgencia"] = {"select": {"name": ext["urgencia"]}}
-                    pr["urgencia"] = {"select": {"name": ext["urgencia"]}}
-                if ext["procedimiento"] and not get_text(pr, "procedimiento"):
-                    upd["procedimiento"] = {"select": {"name": ext["procedimiento"]}}
-                if ext["cie"] and not get_text(pr, "diagnostico_cie10"):
-                    upd["diagnostico_cie10"] = {"rich_text": [{"text": {"content": ext["cie"]}}]}
+                if ext.get("paciente_id") and not get_text(pr, E.INF_PACIENTE_ID):
+                    upd[E.INF_PACIENTE_ID] = {"title": [{"text": {"content": ext["paciente_id"]}}]}
+                    pr[E.INF_PACIENTE_ID] = {"title": [{"text": {"content": ext["paciente_id"]}}]}
+                if ext.get("medico") and not get_text(pr, E.INF_MEDICO):
+                    upd[E.INF_MEDICO] = {"rich_text": [{"text": {"content": ext["medico"]}}]}
+                if ext.get("costo") and not get_text(pr, E.INF_COSTO):
+                    upd[E.INF_COSTO] = {"number": ext["costo"]}
+                if ext.get("urgencia") and not get_text(pr, E.INF_URGENCIA):
+                    upd[E.INF_URGENCIA] = {"select": {"name": ext["urgencia"]}}
+                    pr[E.INF_URGENCIA] = {"select": {"name": ext["urgencia"]}}
+                if ext["procedimiento"] and not get_text(pr, E.INF_PROCEDIMIENTO):
+                    upd[E.INF_PROCEDIMIENTO] = {"select": {"name": ext["procedimiento"]}}
+                if ext["cie"] and not get_text(pr, E.INF_DIAGNOSTICO):
+                    upd[E.INF_DIAGNOSTICO] = {"rich_text": [{"text": {"content": ext["cie"]}}]}
                 if ext["documentos"]:
-                    prev = set(get_text(pr, "documentos") or [])
-                    upd["documentos"] = {"multi_select": [{"name": d} for d in sorted(prev | set(ext["documentos"]))]}
-                    pr["documentos"] = {"multi_select": [{"name": d} for d in sorted(prev | set(ext["documentos"]))]}
+                    prev = set(get_text(pr, E.INF_DOCUMENTOS) or [])
+                    upd[E.INF_DOCUMENTOS] = {"multi_select": [{"name": d} for d in sorted(prev | set(ext["documentos"]))]}
+                    pr[E.INF_DOCUMENTOS] = {"multi_select": [{"name": d} for d in sorted(prev | set(ext["documentos"]))]}
                 if upd:
-                    if "procedimiento" in upd: pr["procedimiento"] = {"select": {"name": ext["procedimiento"]}}
+                    if E.INF_PROCEDIMIENTO in upd: pr[E.INF_PROCEDIMIENTO] = {"select": {"name": ext["procedimiento"]}}
                     try:
                         notion.pages.update(page_id=pg["id"], properties=upd)
                     except Exception as e:
                         # ej. opción select/multi no existe: reintenta sin urgencia/documentos
                         print(f"{pid}: autofill parcial ({e}), reintento sin select")
-                        upd.pop("urgencia", None); pr.pop("urgencia", None)
+                        upd.pop(E.INF_URGENCIA, None); pr.pop(E.INF_URGENCIA, None)
                         try: notion.pages.update(page_id=pg["id"], properties=upd)
                         except Exception as e2: print(f"{pid}: no se pudo rellenar: {e2}")
                     print(f"{pid}: autofill -> {ext}")
-        pid = get_text(pr, "paciente_id") or pid
+        pid = get_text(pr, E.INF_PACIENTE_ID) or pid
         pol = polizas.get(pid)
         if not pol:
             print(f"Sin póliza para {pid}"); continue
-        inf = InformeMedico(pid, get_text(pr, "procedimiento"),
-            get_text(pr, "diagnostico_cie10"), get_text(pr, "medico"),
-            get_text(pr, "urgencia") or "programada",
-            get_text(pr, "documentos") or [],
-            get_text(pr, "costo_estimado") or 0)
+        inf = InformeMedico(pid, get_text(pr, E.INF_PROCEDIMIENTO),
+            get_text(pr, E.INF_DIAGNOSTICO), get_text(pr, E.INF_MEDICO),
+            get_text(pr, E.INF_URGENCIA) or E.URG_PROGRAMADA,
+            get_text(pr, E.INF_DOCUMENTOS) or [],
+            get_text(pr, E.INF_COSTO) or 0)
         r = evaluar(pol, inf)
         notion.pages.create(parent={"data_source_id": cfg.db_resoluciones}, properties={
-            "paciente_id": {"title": [{"text": {"content": pid}}]},
-            "decision": {"select": {"name": r["decision"].value}},
-            "motivo": {"rich_text": [{"text": {"content": r["motivo"][:2000]}}]},
-            "faltantes": {"multi_select": [{"name": f} for f in r["faltantes"]]},
-            "autorizacion_id": {"rich_text": [{"text": {"content": r.get("autorizacion_id", "-")}}]},
+            E.RES_PACIENTE_ID: {"title": [{"text": {"content": pid}}]},
+            E.RES_DECISION: {"select": {"name": r["decision"].value}},
+            E.RES_MOTIVO: {"rich_text": [{"text": {"content": r["motivo"][:2000]}}]},
+            E.RES_FALTANTES: {"multi_select": [{"name": f} for f in r["faltantes"]]},
+            E.RES_AUTORIZACION: {"rich_text": [{"text": {"content": r.get("autorizacion_id", "-")}}]},
         })
-        notion.pages.update(page_id=pg["id"], properties={"estado": {"status": {"name": "Listo"}}})
+        notion.pages.update(page_id=pg["id"], properties={E.INF_ESTADO: {"status": {"name": E.ESTADO_PROCESADO}}})
         print(f"{pid}/{inf.procedimiento} -> {r['decision'].value}")
 
 if __name__ == "__main__":

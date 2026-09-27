@@ -99,11 +99,12 @@ def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) ->
             "faltantes": [],
             "autorizacion_id": f"AUT-{informe.paciente_id}-{hoy.strftime('%Y%m%d')}"}
 
-# ---- Integración Notion (pseudo-código listo para notion-client) ----
+# ---- Integración Notion: el esquema vive en preauth/esquema.py ----
+from preauth.esquema import INFORMES_PROPS, POLIZAS_PROPS, RESOLUCIONES_PROPS
 NOTION_SCHEMA = {
-    "db_informes": ["paciente_id", "procedimiento", "diagnostico_cie10", "urgencia", "documentos", "costo_estimado", "estado"],
-    "db_polizas": ["paciente_id", "cobertura", "fecha_inicio", "carencia", "monto_maximo", "monto_usado"],
-    "db_resoluciones": ["paciente_id", "decision", "motivo", "faltantes", "autorizacion_id", "timestamp"]
+    "db_informes": sorted(INFORMES_PROPS),
+    "db_polizas": sorted(POLIZAS_PROPS),
+    "db_resoluciones": sorted(RESOLUCIONES_PROPS),
 }
 """
 Integración real:

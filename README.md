@@ -55,9 +55,10 @@ Sistema que elimina la espera de horas/días en la autorización de cirugías. R
 ## 3. Modelo de datos en Notion
 
 ### 3.1 DB `Informes_Hospital`
+Nombres y tipos según `preauth/esquema.py` (única fuente de verdad, snake_case).
 | Propiedad | Tipo Notion | Ejemplo |
 |---|---|---|
-| paciente_id | Title / Rich text | P001 |
+| paciente_id | Title | P001 |
 | procedimiento | Select | Colecistectomía |
 | diagnostico_cie10 | Rich text | K80 |
 | medico | Rich text | Dr. Gil |
@@ -65,6 +66,7 @@ Sistema que elimina la espera de horas/días en la autorización de cirugías. R
 | documentos | Multi-select | identificacion, informe_medico, consentimiento, ecografia_abdominal, analitica, presupuesto_hospital |
 | costo_estimado | Number | 8000 |
 | estado | Status: `pendiente`, `procesado` | pendiente |
+| informe_texto | Rich text | Texto libre del informe para autofill |
 
 ### 3.2 DB `Pólizas_Aseguradora`
 | Propiedad | Tipo | Ejemplo |
