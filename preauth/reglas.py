@@ -61,7 +61,7 @@ def meses_afiliado(poliza: Poliza, hoy: date) -> int:
     return (hoy.year - poliza.fecha_inicio.year) * 12 + (hoy.month - poliza.fecha_inicio.month)
 
 def evaluar(poliza: Poliza, informe: InformeMedico, hoy: date = date.today()) -> dict:
-    faltantes, motivos = [], []
+    faltantes = []
 
     # 1. Cobertura
     if not _contiene(poliza.cobertura_procedimientos, informe.procedimiento):
