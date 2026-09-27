@@ -84,26 +84,40 @@ Nombres y tipos según `preauth/esquema.py` (única fuente de verdad, snake_case
 | Propiedad | Tipo | Descripción |
 |---|---|---|
 | paciente_id | Title | Enlace al paciente |
-| decision | Select (4 valores: `PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES`, `DENEGADA`, `REVISION_MANUAL`*) | Resultado del agente |
+| decision | Select (4 valores: `PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES`, `REVISION_MANUAL`, `DENEGADA`) | Resultado del agente |
 | motivo | Rich text | Explicación legible |
 | faltantes | Multi-select | Docs a pedir |
 | autorizacion_id | Rich text | `AUT-P001-20260926`, solo si aprobada |
 | timestamp | Created time | Auditoría |
 | informe | Relation → Informes_Hospital | Idempotencia: una resolución por informe |
 
-\* `REVISION_MANUAL` la emite el motor acumulado del issue #5 (en PR); el resto ya las devuelve `evaluar()`.
-
 ## 4. Motor de reglas (`evaluar()` en `preauth/reglas.py`)
 
-Orden estricto, el primero que falla corta (fail-fast):
+`evaluar()` evalúa **todas** las reglas, registra un hallazgo por regla y decide por precedencia. El resultado incluye `decision`, `motivo`, `faltantes`, `hallazgos` y, solo si se pre-aprueba, `autorizacion_id` y `monto_reservado` (el nuevo total reservado). Los textos se comparan sin tildes, mayúsculas ni espacios extra.
 
-1. **Cobertura**: ¿`procedimiento` está en `cobertura_procedimientos` y no en `exclusiones`? Si no → `DENEGADA`.
-2. **Carencia**: `meses_afiliado = (hoy - fecha_inicio) en meses`. Si `urgencia != emergencia` y `antigüedad < carencia_req` → `DENEGADA`. Ej: póliza exige 8 meses, paciente lleva 5 → denegada.
-3. **Monto**: si `monto_usado + monto_reservado + costo_estimado > monto_maximo` → `DENEGADA`. Al pre-aprobar se suma el costo a `monto_usado` de la póliza (#15).
-4. **Documentos**: `requeridos = DOCS_BASE + DOCS_POR_PROCEDIMIENTO + segunda_opinion si aplica`. `faltantes = requeridos - adjuntos`. Si hay faltantes → `SOLICITUD_DOCUMENTOS_FALTANTES`, si no → `PREAPROBADA`.
+### Reglas
 
-Documentos base: `identificacion, informe_medico, consentimiento`.
-Por procedimiento: Colecistectomía exige `ecografia_abdominal + analitica`, Artroplastia exige `radiografia + segunda_opinion + analitica`, resto exige `presupuesto_hospital`.
+1. **Datos**: si el informe no indica un procedimiento reconocible (vacío o `desconocido`) → revisión manual.
+2. **Vigencia**: si la póliza inicia después de la fecha de evaluación → revisión manual, y no se evalúa la carencia.
+3. **Cobertura**: si el procedimiento no está en `cobertura_procedimientos` o está en `exclusiones` → no cumple.
+4. **Carencia**: si la urgencia no es `emergencia` y los meses completos de afiliación son menos que la carencia exigida (la del procedimiento o la `default`) → no cumple. Ej.: la póliza exige 8 meses y el paciente lleva 5 → no cumple. En emergencia se omite la carencia y queda un hallazgo informativo para revisión posterior.
+5. **Monto**: sin costo estimado (0 o menos) → falta `presupuesto_hospital`. Si `monto_usado + monto_reservado + costo_estimado > monto_maximo` → no cumple. `monto_reservado` suma los costos ya pre-aprobados y aún no liquidados; al pre-aprobar, el costo se suma a `monto_usado` de la póliza en Notion (#15).
+6. **Documentos**: requeridos = `DOCS_BASE` + los del procedimiento (o `default`) + `segunda_opinion` si la póliza lo exige. Los que no están adjuntos se informan en `faltantes`, en orden alfabético.
+
+### Decisión final (precedencia)
+
+| Si algún hallazgo es… | Decisión |
+|---|---|
+| No cumple | `DENEGADA` |
+| Requiere revisión | `REVISION_MANUAL` |
+| Faltan documentos | `SOLICITUD_DOCUMENTOS_FALTANTES` |
+| Ninguno de los anteriores | `PREAPROBADA` |
+
+Si la decisión es `DENEGADA`, `faltantes` queda vacío: una denegación no se corrige con documentos. Todos los hallazgos quedan en `hallazgos` para auditoría.
+
+### Cómo se cuentan los meses de carencia
+
+Se cuentan meses completos: un mes se cumple el mismo día del mes siguiente. Si ese día no existe (póliza iniciada el 31 y un mes con menos días), se cumple el último día de ese mes; por ejemplo, del 31 de enero al 28 de febrero hay un mes. Una póliza que inicia después de la fecha de evaluación no está vigente: el caso pasa a revisión manual y no se evalúa la carencia.
 
 ## 5. Cómo ejecutar en local
 
@@ -156,6 +170,7 @@ resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
 | No cubierto | Rinoplastia estética | `DENEGADA`, no cubierto |
 | Carencia | 5 meses afiliado, exige 8 | `DENEGADA`, `No cumple carencia: 5/8 meses` |
 | Emergencia | Igual anterior pero `urgencia=emergencia` | Salta carencia, sigue a monto/documentos |
+| Póliza futura | Póliza que inicia después de la fecha de evaluación | `REVISION_MANUAL`, no se evalúa la carencia |
 
 ## 7. Rendimiento medido
 

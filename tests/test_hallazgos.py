@@ -149,3 +149,10 @@ def test_monto_excedido_con_procedimiento_vacio_sigue_siendo_denegada():
     r = evaluar(poliza(), informe("", costo_estimado=46000), HOY)
     assert r["decision"] is Decision.DENEGADA
     assert r["motivo"] == "Excede monto máximo de póliza."
+
+def test_cada_regla_aporta_un_solo_hallazgo():
+    r = evaluar(poliza(), informe(), HOY)
+    reglas = [h.regla for h in r["hallazgos"]]
+    assert len(reglas) == len(set(reglas)), f"Reglas repetidas: {reglas}"
+    assert set(reglas) == {"vigencia", "cobertura", "carencia", "monto", "documentos"}
+    
