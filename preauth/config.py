@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 PROVEEDORES_LLM = {"openai", "ollama", "regex"}
+ESFUERZOS_RAZONAMIENTO = {"minimal", "low", "medium", "high"}
 
 
 class ConfigError(RuntimeError):
@@ -46,6 +47,7 @@ class NotionSettings:
 class LLMSettings:
     provider: str
     openai_model: str
+    openai_reasoning_effort: str
     ollama_url: str
     ollama_model: str
 
@@ -69,9 +71,15 @@ def llm_settings() -> LLMSettings:
         raise ConfigError(
             f"LLM_PROVIDER='{provider}' no es valido. Usa uno de: {sorted(PROVEEDORES_LLM)}."
         )
+    esfuerzo = _opcional("OPENAI_REASONING_EFFORT", "minimal").lower()
+    if esfuerzo not in ESFUERZOS_RAZONAMIENTO:
+        raise ConfigError(
+            f"OPENAI_REASONING_EFFORT='{esfuerzo}' no es valido. Usa uno de: {sorted(ESFUERZOS_RAZONAMIENTO)}."
+        )
     return LLMSettings(
         provider=provider,
         openai_model=_opcional("OPENAI_MODEL", "gpt-5-mini"),
+        openai_reasoning_effort=esfuerzo,
         ollama_url=_opcional("OLLAMA_URL", "http://localhost:11434"),
         ollama_model=_opcional("OLLAMA_MODEL", "llama3.2:3b"),
     )
