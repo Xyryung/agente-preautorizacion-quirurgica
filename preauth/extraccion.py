@@ -100,16 +100,17 @@ def _limitar(texto: str) -> tuple[str, tuple[str, ...]]:
 
 def _cliente_openai():
     from openai import OpenAI  # import diferido: las pruebas y el proveedor regex no lo necesitan
-    return OpenAI(timeout=TIMEOUT_S, max_retries=1)
+    return OpenAI(timeout=TIMEOUT_S, max_retries=0)
 
 
-def _extraer_con_openai(texto: str, cliente, modelo: str) -> ExtraccionInforme:
+def _extraer_con_openai(texto: str, cliente, modelo: str, esfuerzo: str) -> ExtraccionInforme:
     respuesta = cliente.responses.parse(
         model=modelo,
         input=[{"role": "system", "content": INSTRUCCIONES},
                {"role": "user", "content": texto}],
         text_format=ExtraccionInforme,
         store=False,  # no guardar el informe en OpenAI
+        reasoning={"effort": esfuerzo},  # poco razonamiento: extraer no requiere pensar mucho
     )
     if respuesta.output_parsed is None:
         raise RuntimeError("El modelo no devolvio una extraccion (posible rechazo).")
@@ -173,7 +174,8 @@ def extraer(texto: str, *, proveedor: str | None = None, cliente=None) -> Result
 
     if proveedor == "openai":
         try:
-            datos = _extraer_con_openai(texto, cliente or _cliente_openai(), cfg.openai_model)
+            datos = _extraer_con_openai(texto, cliente or _cliente_openai(), cfg.openai_model,
+                                        cfg.openai_reasoning_effort)
             ms = (time.perf_counter() - inicio) * 1000
             return ResultadoExtraccion(_normalizar(datos), "openai", ms, None, advertencias)
         except Exception as e:  # respaldo deliberado: cualquier fallo de la IA usa regex

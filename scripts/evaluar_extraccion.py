@@ -12,6 +12,7 @@ import json
 import statistics
 from pathlib import Path
 
+from preauth.config import llm_settings
 from preauth.extraccion import extraer
 
 DATOS = Path(__file__).resolve().parent.parent / "tests" / "data" / "informes_sinteticos.json"
@@ -62,7 +63,11 @@ def main() -> None:
                               f"obtenido {obtenido[campo]!r}")
 
     n = len(casos)
-    print(f"### Extraccion con `{args.proveedor}` ({n} informes sinteticos)\n")
+    detalle = ""
+    if args.proveedor == "openai":
+        cfg = llm_settings()
+        detalle = f", modelo `{cfg.openai_model}`, razonamiento `{cfg.openai_reasoning_effort}`"
+    print(f"\n### Extraccion con `{args.proveedor}`{detalle} ({n} informes sinteticos)\n")
     print("| Campo | Aciertos | Precision |")
     print("|---|---|---|")
     for campo in CAMPOS:

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pydantic
 import pytest
 
-from preauth.config import llm_settings
+from preauth.config import ConfigError, llm_settings
 from preauth.extraccion import (
     MAX_CARACTERES, ExtraccionInforme, extraer, extraer_desde_texto,
 )
@@ -70,6 +70,7 @@ def test_se_envia_el_esquema_el_modelo_y_no_se_almacena():
     assert llamada["text_format"] is ExtraccionInforme
     assert llamada["model"] == llm_settings().openai_model
     assert llamada["store"] is False
+    assert llamada["reasoning"] == {"effort": llm_settings().openai_reasoning_effort}
     assert TEXTO in str(llamada["input"])
 
 
@@ -120,6 +121,17 @@ def test_el_proveedor_por_defecto_en_pruebas_es_regex():
     # Garantiza que la suite nunca llama a OpenAI por accidente (ver conftest.py).
     assert extraer(TEXTO).proveedor == "regex"
 
+def test_esfuerzo_de_razonamiento_por_defecto_es_minimal(monkeypatch):
+    monkeypatch.delenv("OPENAI_REASONING_EFFORT", raising=False)
+    llm_settings.cache_clear()
+    assert llm_settings().openai_reasoning_effort == "minimal"
+
+
+def test_esfuerzo_de_razonamiento_invalido_se_rechaza(monkeypatch):
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "turbo")
+    llm_settings.cache_clear()
+    with pytest.raises(ConfigError):
+        llm_settings()
 
 def test_proveedor_invalido_se_rechaza():
     with pytest.raises(ValueError):
