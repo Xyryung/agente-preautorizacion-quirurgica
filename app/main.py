@@ -14,9 +14,11 @@ from datetime import date
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from app import proteccion
 from preauth.reglas import InformeMedico, Poliza, evaluar
 
 app = FastAPI(title="Agente de Pre-Autorización Quirúrgica", version="0.1.0")
+proteccion.instalar(app)
 
 POLIZA_DEMO = Poliza("P001", ["Colecistectomía"], date(2024, 1, 1), {"default": 8}, 50000, 5000)
 
@@ -95,10 +97,14 @@ PAGINA = """<!doctype html>
   .ok { color: var(--ok); font-weight: 600; }
   .pendiente { color: var(--pend); font-weight: 600; }
   .denegada { color: var(--no); font-weight: 600; }
+  .aviso { border-left: 4px solid var(--pend); background: #fff7e6; color: var(--tinta);
+           padding: .6rem .9rem; max-width: none; }
 </style>
 </head>
 <body>
 <h1>Agente de pre-autorización quirúrgica</h1>
+<p class="aviso" role="note"><strong>Solo datos sintéticos.</strong> No ingreses datos reales de
+pacientes (Ley 81 de 2019 de protección de datos personales de Panamá).</p>
 <p>Versión preliminar: tres casos sintéticos evaluados en vivo por el motor de reglas.
 Todos los datos son ficticios. La versión completa leerá informes y pólizas desde Notion.</p>
 <div class="tabla">
