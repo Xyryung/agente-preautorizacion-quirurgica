@@ -179,6 +179,33 @@ Medición con `gpt-5-mini`, razonamiento `minimal`:
 
 **Limitación:** ninguna de las dos señales detectó el único error medido (S10). La confianza del informe con error (0,90) fue igual a la de los informes correctos: la confianza refleja cuánta información hay (el informe vacío, S09, obtuvo 0,60), no si la interpretación es correcta. Las citas fueron todas textuales (61/61), así que no hubo falsas alarmas, pero S10 no inventó texto: interpretó mal una frase real. Para esos casos, `evidencia` muestra al revisor la frase exacta que se usó. El umbral de 0,7 es una red de seguridad elegida con 10 informes, no una calibración.
 
+## Coherencia diagnóstico-procedimiento
+
+La regla `coherencia` envía el caso a `REVISION_MANUAL` (nunca lo deniega) si:
+
+- la IA indica que el diagnóstico no justifica el procedimiento (con su justificación);
+- la IA no evaluó la coherencia aunque había diagnóstico y procedimiento; o
+- el diagnóstico no está entre las categorías CIE-10 habituales para ese procedimiento (`DIAGNOSTICOS_HABITUALES` en `reglas.py`). Esta tabla determinista aplica también a informes cargados a mano.
+
+**La tabla no está validada clínicamente**: es una red de seguridad inicial. Un diagnóstico legítimo que no figure en ella produce una revisión manual innecesaria, que es la dirección segura del error.
+
+### Medición: 4 ejecuciones × 13 informes sintéticos (3 incoherentes)
+
+| Ejecución | Procedimiento | Documentos | Coherencia | Latencia p50 | p95 | Máx. |
+|---|---|---|---|---|---|---|
+| 1 | 12/13 | 12/13 | 12/13 | 3,1 s | 5,4 s | 6,0 s |
+| 2 | 12/13 | 12/13 | 11/13 | 3,2 s | 4,5 s | 4,7 s |
+| 3 | 13/13 | 12/13 | 12/13 | 3,4 s | 6,2 s | 7,8 s |
+| 4 | 12/13 | 12/13 | 13/13 | 2,8 s | 4,9 s | 5,5 s |
+
+Urgencia, costo y CIE-10: 13/13 en las cuatro ejecuciones.
+
+- **Los resultados varían entre ejecuciones:** con 13 informes, una diferencia de un campo entre versiones está dentro de esa variación.
+- **La IA calificó S11 (Z41.1 + colecistectomía) como coherente en 2 de 4 ejecuciones.** Sin la tabla, ese caso se habría pre-aprobado. La tabla lo detecta siempre.
+- **En S12 la IA cambió el procedimiento en 3 de 4 ejecuciones** (una vez a `Cataratas`, para que coincida con el diagnóstico; dos a `desconocido`). Pendiente en #38.
+- **En una ejecución la IA alteró una cita** ("de emergency" en lugar de "de emergencia"): la verificación de citas la marcó y el caso habría ido a revisión, una falsa alarma en la dirección segura.
+- **S01:** la IA considera adjunto el presupuesto cuando el informe solo indica su monto (4 de 4). Es una ambigüedad del texto; se documenta en lugar de ajustar la instrucción a este caso.
+
 ## 6. Cómo ejecutar en local
 
 Requisitos: Python 3.14 (la misma versión que usan Render y CI) y Git.
