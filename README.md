@@ -70,17 +70,17 @@ Sistema que elimina la espera de horas/días en la autorización de cirugías. R
 | autorizacion_id | Rich text | `AUT-P001-20260926`, solo si aprobada |
 | timestamp | Created time | Auditoría |
 
-## 4. Motor de reglas (`evaluar()` en `agente_preauth.py:47`)
+## 4. Motor de reglas (`evaluar()` en `agente_preauth.py`)
 
 Orden estricto, el primero que falla corta (fail-fast):
 
-1. **Cobertura** (`:51-54`): ¿`procedimiento` está en `cobertura_procedimientos` y no en `exclusiones`? Si no → `DENEGADA`.
-2. **Carencia** (`:57-63`): `meses_afiliado = (hoy - fecha_inicio) en meses`. Si `urgencia != emergencia` y `antigüedad < carencia_req` → `DENEGADA`. Ej: póliza exige 8 meses, paciente lleva 5 → denegada.
-3. **Monto** (`:66-67`): si `monto_usado + costo_estimado > monto_maximo` → `DENEGADA`.
-4. **Documentos** (`:70-78`): `requeridos = DOCS_BASE + DOCS_POR_PROCEDIMIENTO + segunda_opinion si aplica`. `faltantes = requeridos - adjuntos`. Si hay faltantes → `SOLICITUD_DOCUMENTOS_FALTANTES`, si no → `PREAPROBADA`.
+1. **Cobertura**: ¿`procedimiento` está en `cobertura_procedimientos` y no en `exclusiones`? Si no → `DENEGADA`.
+2. **Carencia**: `meses_afiliado = (hoy - fecha_inicio) en meses`. Si `urgencia != emergencia` y `antigüedad < carencia_req` → `DENEGADA`. Ej: póliza exige 8 meses, paciente lleva 5 → denegada.
+3. **Monto**: si `monto_usado + costo_estimado > monto_maximo` → `DENEGADA`.
+4. **Documentos**: `requeridos = DOCS_BASE + DOCS_POR_PROCEDIMIENTO + segunda_opinion si aplica`. `faltantes = requeridos - adjuntos`. Si hay faltantes → `SOLICITUD_DOCUMENTOS_FALTANTES`, si no → `PREAPROBADA`.
 
-Documentos base (`:37`): `identificacion, informe_medico, consentimiento`.
-Por procedimiento (`:38-42`): Colecistectomía exige `ecografia_abdominal + analitica`, Artroplastia exige `radiografia + segunda_opinion + analitica`, resto exige `presupuesto_hospital`.
+Documentos base: `identificacion, informe_medico, consentimiento`.
+Por procedimiento: Colecistectomía exige `ecografia_abdominal + analitica`, Artroplastia exige `radiografia + segunda_opinion + analitica`, resto exige `presupuesto_hospital`.
 
 ## 5. Instalación y uso
 
@@ -116,7 +116,7 @@ resp = notion.databases.query(database_id=os.environ["NOTION_DB_INFORMES"],
 
 | Caso | Entrada | Salida |
 |---|---|---|
-| Aprobado | P001, Colecistectomía, 20 meses afiliado, docs completos, $8000/$50000 | `PREAPROBADA`, `AUT-P001-20260926` |
+| Aprobado | P001, Colecistectomía, 32 meses afiliado (póliza desde 01/01/2024, evaluada el 26/09/2026), docs completos, $8000/$50000 | `PREAPROBADA`, `AUT-P001-20260926` |
 | Faltan docs | Solo `identificacion + informe_medico` | `SOLICITUD_DOCUMENTOS_FALTANTES`, faltan `consentimiento, ecografia_abdominal, analitica` |
 | No cubierto | Rinoplastia estética | `DENEGADA`, no cubierto |
 | Carencia | 5 meses afiliado, exige 8 | `DENEGADA`, `No cumple carencia: 5/8 meses` |
