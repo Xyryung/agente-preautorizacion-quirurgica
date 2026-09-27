@@ -16,7 +16,8 @@ from preauth.config import llm_settings
 from preauth.extraccion import citas_no_encontradas, extraer
 
 DATOS = Path(__file__).resolve().parent.parent / "tests" / "data" / "informes_sinteticos.json"
-CAMPOS = ["procedimiento", "urgencia", "costo_estimado", "cie10", "documentos_aportados"]
+CAMPOS = ["procedimiento", "urgencia", "costo_estimado", "cie10", "documentos_aportados",
+          "coherencia_diagnostico"]
 
 
 def coincide(campo: str, obtenido, esperado) -> bool:

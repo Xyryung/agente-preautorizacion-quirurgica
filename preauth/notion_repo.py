@@ -220,7 +220,10 @@ def procesar_informe(notion, ds_res: str, pg, autofill=True):
         get_text(pr, E.INF_COSTO) or 0,
         # 6b/#33: la confianza y las citas solo viven en la extracción (sin columna Notion)
         confianza_extraccion=ext["confianza"] if ext is not None else None,
-        citas_no_encontradas=ext["citas_no_encontradas"] if ext is not None else [])
+        citas_no_encontradas=ext["citas_no_encontradas"] if ext is not None else [],
+        # #7: veredicto de coherencia de la IA; .get() tolera extracciones sin estas claves
+        coherencia_diagnostico=ext.get("coherencia") if ext is not None else None,
+        justificacion_coherencia=ext.get("justificacion_coherencia", "") if ext is not None else "")
     if resolucion_existe(pg["id"]):
         print(f"{pid}: resolucion ya existe, salto")
     else:

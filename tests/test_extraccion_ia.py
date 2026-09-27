@@ -21,6 +21,7 @@ def extraccion(**cambios) -> ExtraccionInforme:
         procedimiento="Colecistectomía", cie10="K80.2", urgencia="programada",
         costo_estimado=8000.0, paciente_id="P001", medico="Dra. Ríos",
         documentos_aportados=["analitica"], documentos_pendientes=["ecografia_abdominal"],
+        coherencia_diagnostico="coherente", justificacion_coherencia="K80.2 justifica la colecistectomía.",
         evidencia=[{"campo": "procedimiento", "cita": "Colecistectomía programada"}],
         confianza=0.9,
     )
@@ -152,7 +153,8 @@ def test_compatibilidad_mantiene_las_claves_del_diccionario():
     # Claves de siempre + las dos de #6b (confianza y citas no encontradas).
     assert set(d) == {"procedimiento", "cie", "documentos", "urgencia",
                       "paciente_id", "medico", "costo",
-                      "confianza", "citas_no_encontradas"}
+                      "confianza", "citas_no_encontradas",
+                      "coherencia", "justificacion_coherencia"}
 
 
 def test_compatibilidad_traduce_la_salida_del_modelo():

@@ -190,12 +190,13 @@ def test_autofill_evalua_con_los_datos_extraidos_del_texto(monkeypatch):
     monkeypatch.setattr(nr, "resolucion_existe", lambda page_id: False)
     monkeypatch.setattr(nr, "evaluar", lambda pol, inf: evaluados.append(inf) or evaluar_real(pol, inf))
 
-        # En pruebas la extraccion usa regex (confianza 0.0), que 6b envia a revision manual.
-    # Esta prueba verifica que la decision use lo extraido, asi que simula una extraccion
-    # con confianza de IA; el caso de confianza 0.0 se prueba aparte.
+    # En pruebas la extraccion usa regex (confianza 0.0, coherencia "no_evaluable"), que 6b y #7
+    # envian a revision manual. Esta prueba verifica que la decision use lo extraido, asi que
+    # simula una extraccion de IA; esos casos se prueban aparte.
     extraer_real = nr.extraer_desde_texto
     monkeypatch.setattr(nr, "extraer_desde_texto",
-                        lambda texto: {**extraer_real(texto), "confianza": 0.95})
+                        lambda texto: {**extraer_real(texto), "confianza": 0.95,
+                                       "coherencia": "coherente"})
     
     nr.procesar_informe(FakeClient(), "res", pg)
 

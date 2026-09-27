@@ -3,70 +3,206 @@
     "id": "S01",
     "descripcion": "Caso completo, programado",
     "texto": "Informe quirúrgico. Paciente P001, 54 años. Diagnóstico: colelitiasis sintomática (CIE-10 K80.2). Se indica colecistectomía laparoscópica programada. Se adjuntan cédula, informe médico, consentimiento informado firmado, ecografía abdominal y analítica preoperatoria. Presupuesto del hospital: 8000 USD. Dra. Ana Ríos.",
-    "esperado": {"procedimiento": "Colecistectomía", "urgencia": "programada", "costo_estimado": 8000, "cie10": "K80.2",
-                 "documentos_aportados": ["analitica", "consentimiento", "ecografia_abdominal", "identificacion", "informe_medico", "presupuesto_hospital"]}
+    "esperado": {
+      "procedimiento": "Colecistectomía",
+      "urgencia": "programada",
+      "costo_estimado": 8000,
+      "cie10": "K80.2",
+      "documentos_aportados": [
+        "analitica",
+        "consentimiento",
+        "ecografia_abdominal",
+        "identificacion",
+        "informe_medico"
+      ],
+      "coherencia_diagnostico": "coherente"
+    }
   },
   {
     "id": "S02",
     "descripcion": "Negacion de urgencia y segunda opinion pendiente",
     "texto": "Paciente P002. Gonartrosis primaria bilateral (M17.0). Se propone artroplastia total de rodilla. El caso no es urgente. Se presentan radiografía de rodillas y analítica. Queda pendiente la segunda opinión de traumatología. Costo estimado 12500 USD. Dr. Luis Pérez.",
-    "esperado": {"procedimiento": "Artroplastia", "urgencia": "programada", "costo_estimado": 12500, "cie10": "M17.0",
-                 "documentos_aportados": ["analitica", "radiografia"]}
+    "esperado": {
+      "procedimiento": "Artroplastia",
+      "urgencia": "programada",
+      "costo_estimado": 12500,
+      "cie10": "M17.0",
+      "documentos_aportados": [
+        "analitica",
+        "radiografia"
+      ],
+      "coherencia_diagnostico": "coherente"
+    }
   },
   {
     "id": "S03",
     "descripcion": "Emergencia real",
     "texto": "Paciente P003 ingresa por el cuarto de urgencias con dolor en fosa ilíaca derecha. Apendicitis aguda (K35.8). Requiere apendicectomía de emergencia. Se adjunta identificación. Costo estimado 6200 USD. Dr. Carlos Gil.",
-    "esperado": {"procedimiento": "Apendicectomía", "urgencia": "emergencia", "costo_estimado": 6200, "cie10": "K35.8",
-                 "documentos_aportados": ["identificacion"]}
+    "esperado": {
+      "procedimiento": "Apendicectomía",
+      "urgencia": "emergencia",
+      "costo_estimado": 6200,
+      "cie10": "K35.8",
+      "documentos_aportados": [
+        "identificacion"
+      ],
+      "coherencia_diagnostico": "coherente"
+    }
   },
   {
     "id": "S04",
     "descripcion": "Mayusculas sin tildes, sin costo, sin urgencia indicada",
     "texto": "PACIENTE P004. DIAGNOSTICO K80.1. SE SOLICITA AUTORIZACION PARA COLECISTECTOMIA. SE ADJUNTA INFORME MEDICO.",
-    "esperado": {"procedimiento": "Colecistectomía", "urgencia": "no_indicada", "costo_estimado": null, "cie10": "K80.1",
-                 "documentos_aportados": ["informe_medico"]}
+    "esperado": {
+      "procedimiento": "Colecistectomía",
+      "urgencia": "no_indicada",
+      "costo_estimado": null,
+      "cie10": "K80.1",
+      "documentos_aportados": [
+        "informe_medico"
+      ],
+      "coherencia_diagnostico": "coherente"
+    }
   },
   {
     "id": "S05",
     "descripcion": "Documentos pendientes vs aportados",
     "texto": "Paciente P005. Catarata senil (H25.1). Cirugía de cataratas electiva. Se entregan cédula y consentimiento firmado. Falta la analítica, que se solicitará al laboratorio. Costo estimado 3100 USD.",
-    "esperado": {"procedimiento": "Cataratas", "urgencia": "programada", "costo_estimado": 3100, "cie10": "H25.1",
-                 "documentos_aportados": ["consentimiento", "identificacion"]}
+    "esperado": {
+      "procedimiento": "Cataratas",
+      "urgencia": "programada",
+      "costo_estimado": 3100,
+      "cie10": "H25.1",
+      "documentos_aportados": [
+        "consentimiento",
+        "identificacion"
+      ],
+      "coherencia_diagnostico": "coherente"
+    }
   },
   {
     "id": "S06",
     "descripcion": "Costo en balboas con separador de miles",
     "texto": "Paciente P006. Hernia inguinal unilateral (K40.9). Hernioplastia inguinal programada. Se adjunta el presupuesto del hospital por B/. 4.800 y la cédula del paciente.",
-    "esperado": {"procedimiento": "Hernia inguinal", "urgencia": "programada", "costo_estimado": 4800, "cie10": "K40.9",
-                 "documentos_aportados": ["identificacion", "presupuesto_hospital"]}
+    "esperado": {
+      "procedimiento": "Hernia inguinal",
+      "urgencia": "programada",
+      "costo_estimado": 4800,
+      "cie10": "K40.9",
+      "documentos_aportados": [
+        "identificacion",
+        "presupuesto_hospital"
+      ],
+      "coherencia_diagnostico": "coherente"
+    }
   },
   {
     "id": "S07",
     "descripcion": "Procedimiento estetico",
     "texto": "Paciente P007 solicita rinoplastia estética por motivos no funcionales (Z41.1). Procedimiento programado. Se adjunta identificación. Costo 5000 USD.",
-    "esperado": {"procedimiento": "Rinoplastia estética", "urgencia": "programada", "costo_estimado": 5000, "cie10": "Z41.1",
-                 "documentos_aportados": ["identificacion"]}
+    "esperado": {
+      "procedimiento": "Rinoplastia estética",
+      "urgencia": "programada",
+      "costo_estimado": 5000,
+      "cie10": "Z41.1",
+      "documentos_aportados": [
+        "identificacion"
+      ],
+      "coherencia_diagnostico": "coherente"
+    }
   },
   {
     "id": "S08",
     "descripcion": "Procedimiento fuera de la lista",
     "texto": "Paciente P008. Obesidad mórbida (E66.0). Se indica bypass gástrico laparoscópico programado. Se adjuntan cédula y analítica. Costo estimado 15000 USD.",
-    "esperado": {"procedimiento": "desconocido", "urgencia": "programada", "costo_estimado": 15000, "cie10": "E66.0",
-                 "documentos_aportados": ["analitica", "identificacion"]}
+    "esperado": {
+      "procedimiento": "desconocido",
+      "urgencia": "programada",
+      "costo_estimado": 15000,
+      "cie10": "E66.0",
+      "documentos_aportados": [
+        "analitica",
+        "identificacion"
+      ],
+      "coherencia_diagnostico": "no_evaluable"
+    }
   },
   {
     "id": "S09",
     "descripcion": "Informe sin datos utiles",
     "texto": "Paciente P009. Se envía documentación para trámite.",
-    "esperado": {"procedimiento": "desconocido", "urgencia": "no_indicada", "costo_estimado": null, "cie10": null,
-                 "documentos_aportados": []}
+    "esperado": {
+      "procedimiento": "desconocido",
+      "urgencia": "no_indicada",
+      "costo_estimado": null,
+      "cie10": null,
+      "documentos_aportados": [],
+      "coherencia_diagnostico": "no_evaluable"
+    }
   },
   {
     "id": "S10",
     "descripcion": "Negacion de emergencia y costo en palabras",
     "texto": "Paciente P010. Colecistitis crónica (K81.1). No se trata de una emergencia: la colecistectomía se programa para el 14 de octubre. Se adjunta ecografía abdominal. El presupuesto asciende a ocho mil dólares.",
-    "esperado": {"procedimiento": "Colecistectomía", "urgencia": "programada", "costo_estimado": 8000, "cie10": "K81.1",
-                 "documentos_aportados": ["ecografia_abdominal"]}
+    "esperado": {
+      "procedimiento": "Colecistectomía",
+      "urgencia": "programada",
+      "costo_estimado": 8000,
+      "cie10": "K81.1",
+      "documentos_aportados": [
+        "ecografia_abdominal"
+      ],
+      "coherencia_diagnostico": "coherente"
+    }
+  },
+  {
+    "id": "S11",
+    "descripcion": "Incoherente: diagnostico estetico para una colecistectomia",
+    "texto": "Paciente P011. Diagnóstico: procedimiento con fines estéticos (Z41.1). Se solicita colecistectomía programada. Se adjuntan cédula, informe médico, consentimiento, ecografía abdominal y analítica. Costo estimado 7500 USD.",
+    "esperado": {
+      "procedimiento": "Colecistectomía",
+      "urgencia": "programada",
+      "costo_estimado": 7500,
+      "cie10": "Z41.1",
+      "documentos_aportados": [
+        "analitica",
+        "consentimiento",
+        "ecografia_abdominal",
+        "identificacion",
+        "informe_medico"
+      ],
+      "coherencia_diagnostico": "incoherente"
+    }
+  },
+  {
+    "id": "S12",
+    "descripcion": "Incoherente: catarata para una artroplastia",
+    "texto": "Paciente P012. Catarata senil del ojo derecho (H25.1). Se programa artroplastia total de rodilla. Se presentan radiografía y analítica. Costo estimado 11000 USD.",
+    "esperado": {
+      "procedimiento": "Artroplastia",
+      "urgencia": "programada",
+      "costo_estimado": 11000,
+      "cie10": "H25.1",
+      "documentos_aportados": [
+        "analitica",
+        "radiografia"
+      ],
+      "coherencia_diagnostico": "incoherente"
+    }
+  },
+  {
+    "id": "S13",
+    "descripcion": "Incoherente: hernia inguinal para una apendicectomia de emergencia",
+    "texto": "Paciente P013 ingresa por urgencias. Diagnóstico: hernia inguinal (K40.9). Se indica apendicectomía de emergencia. Se adjunta identificación. Costo estimado 5800 USD.",
+    "esperado": {
+      "procedimiento": "Apendicectomía",
+      "urgencia": "emergencia",
+      "costo_estimado": 5800,
+      "cie10": "K40.9",
+      "documentos_aportados": [
+        "identificacion"
+      ],
+      "coherencia_diagnostico": "incoherente"
+    }
   }
 ]
