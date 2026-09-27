@@ -145,7 +145,7 @@ El motor corta en el primer fallo y devuelve un solo motivo. Datos faltantes se 
 ## Tareas
 - [ ] Modelo Pydantic `ExtraccionInforme` con `Literal` para procedimiento (lista cerrada + "desconocido"), documentos y urgencia; campos `cie10`, `costo_estimado`, `documentos_aportados`, `documentos_pendientes`, `evidencia` (citas cortas del texto) y `confianza` (0 a 1).
 - [ ] Variable `LLM_PROVIDER=openai|ollama|regex`. OpenAI con `client.responses.parse(..., text_format=ExtraccionInforme)` y modelo en `OPENAI_MODEL`.
-- [ ] Ollama: pasar el JSON schema en el parámetro `format` en lugar de limpiar el texto a mano (confirmar en la documentación de Ollama).
+- [ ] (Opcional, solo desarrollo local) Ollama: pasar el JSON schema en el parámetro `format` en lugar de limpiar el texto a mano.
 - [ ] Timeout <= 20 s. Si falla, usar regex, pero la urgencia solo sale del campo explícito, nunca del texto.
 - [ ] Limitar el tamaño del texto de entrada.
 - [ ] Confianza por debajo de un umbral -> REVISION_MANUAL.
