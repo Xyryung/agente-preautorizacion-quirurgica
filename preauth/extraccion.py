@@ -7,6 +7,10 @@ Dos caminos, que el issue #6 unificara detras de LLM_PROVIDER:
 import json
 import re
 import urllib.request
+from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel
 
 from preauth.texto import norm
 
@@ -19,6 +23,52 @@ DOC_KEYWORDS = {"identificacion": ["dni", "identificacion", "cedula"], "informe_
     "consentimiento": ["consentimiento"], "ecografia_abdominal": ["ecografia"],
     "analitica": ["analitica", "analítica", "sangre"], "radiografia": ["radiografia"],
     "segunda_opinion": ["segunda opinion"], "presupuesto_hospital": ["presupuesto", "costo", "€", "$"]}
+
+# ---------------------------------------------------------------------------
+# Contrato de la extraccion (issue #6)
+# ---------------------------------------------------------------------------
+MAX_CARACTERES = 8000   # los informes mas largos se recortan antes de enviarlos
+DESCONOCIDO = "desconocido"
+NO_INDICADA = "no_indicada"
+DOCUMENTOS_CONOCIDOS = list(DOC_KEYWORDS)
+
+# Los Literal se construyen desde las listas de arriba: una sola fuente de verdad.
+Procedimiento = Literal[tuple(PROCEDIMIENTOS_CONOCIDOS + [DESCONOCIDO])]
+Documento = Literal[tuple(DOCUMENTOS_CONOCIDOS)]
+Urgencia = Literal["emergencia", "programada", NO_INDICADA]
+
+
+class Evidencia(BaseModel):
+    campo: str   # "procedimiento", "urgencia", "costo_estimado", ...
+    cita: str    # fragmento textual breve del informe que justifica el valor
+
+
+class ExtraccionInforme(BaseModel):
+    """Lo que debe devolver el modelo. Los Literal le obligan a elegir de nuestras listas."""
+    procedimiento: Procedimiento
+    cie10: str | None
+    urgencia: Urgencia
+    costo_estimado: float | None
+    paciente_id: str | None
+    medico: str | None
+    documentos_aportados: list[Documento]
+    documentos_pendientes: list[Documento]
+    evidencia: list[Evidencia]
+    confianza: float
+
+
+@dataclass(frozen=True)
+class ResultadoExtraccion:
+    datos: ExtraccionInforme
+    proveedor: str                  # el que realmente produjo 'datos': "openai" o "regex"
+    latencia_ms: float
+    error: str | None = None        # por que se uso el respaldo, si se uso
+    advertencias: tuple[str, ...] = ()
+
+
+def extraer(texto: str, *, proveedor: str | None = None, cliente=None) -> ResultadoExtraccion:
+    """Punto de entrada de la extraccion. Se implementa en el siguiente commit."""
+    raise NotImplementedError("extraer() se implementa en el issue #6")
 
 def extraer_desde_texto(texto: str) -> dict:
     t = norm(texto) 
