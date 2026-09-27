@@ -140,6 +140,30 @@ El informe en texto libre se convierte en datos estructurados con la API de Open
 
 Se eligió `minimal`: con `low` se evita el único error (S10: marcar como aportado el presupuesto porque el informe menciona su monto), pero la latencia se duplica y el máximo (17,3 s) queda cerca del tiempo límite de 20 s, que haría caer el caso al respaldo sin IA. Con 10 informes y una ejecución por configuración, la diferencia de un campo es indicativa, no concluyente.
 
+### Señales para revisión manual
+
+La regla `extraccion` envía el caso a `REVISION_MANUAL` si:
+
+- **la confianza que reporta el modelo es menor que 0,7**, o si se usó el respaldo sin IA (confianza 0); o
+- **alguna cita de `evidencia` no aparece en el informe** (señal de que el modelo inventó texto).
+
+Medición con `gpt-5-mini`, razonamiento `minimal`:
+
+| Informe | Confianza | Campos con error | Citas encontradas en el texto |
+|---|---|---|---|
+| S01 | 0,95 | 0 | 7/7 |
+| S02 | 0,90 | 0 | 8/8 |
+| S03 | 0,95 | 0 | 7/7 |
+| S04 | 0,90 | 0 | 4/4 |
+| S05 | 0,90 | 0 | 7/7 |
+| S06 | 0,90 | 0 | 7/7 |
+| S07 | 0,90 | 0 | 6/6 |
+| S08 | 0,90 | 0 | 6/6 |
+| S09 | 0,60 | 0 | 2/2 |
+| S10 | 0,90 | 1 | 7/7 |
+
+**Limitación:** ninguna de las dos señales detectó el único error medido (S10). La confianza del informe con error (0,90) fue igual a la de los informes correctos: la confianza refleja cuánta información hay (el informe vacío, S09, obtuvo 0,60), no si la interpretación es correcta. Las citas fueron todas textuales (61/61), así que no hubo falsas alarmas, pero S10 no inventó texto: interpretó mal una frase real. Para esos casos, `evidencia` muestra al revisor la frase exacta que se usó. El umbral de 0,7 es una red de seguridad elegida con 10 informes, no una calibración.
+
 ## 6. Cómo ejecutar en local
 
 Requisitos: Python 3.14 (la misma versión que usan Render y CI) y Git.
