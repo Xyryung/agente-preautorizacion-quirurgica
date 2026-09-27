@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Misma version que PYTHON_VERSION en Render
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Pruebas
+        run: pytest -v
+
+  # Render no despliega solo porque el repo se conecta como publico.
+  # Este job lo dispara solo cuando las pruebas pasan en main.
+  deploy:
+    needs: tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Desplegar en Render
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::warning::Falta el secret RENDER_DEPLOY_HOOK_URL; no se despliega."
+            exit 0
+          fi
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+          echo "Deploy solicitado a Render."
