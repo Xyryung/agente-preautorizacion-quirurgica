@@ -1,5 +1,39 @@
-"""Extracción con IA local (Ollama). Sin API key. Requiere: ollama pull llama3.2:3b"""
-import json, urllib.request
+"""Extraccion de datos del informe medico.
+
+Dos caminos, que el issue #6 unificara detras de LLM_PROVIDER:
+- extraer_desde_texto(): reglas con expresiones regulares (sin IA).
+- extraer_con_ia(): LLM local via Ollama (origen: llm_local.py).
+"""
+import json
+import re
+import urllib.request
+
+PROCEDIMIENTOS_CONOCIDOS = ["Colecistectomía", "Artroplastia", "Apendicectomía", "Cataratas", "Hernia inguinal", "Rinoplastia estética"]
+CIE_RE = re.compile(r"\b[A-Z]\d{2}(?:\.\d)?\b")
+PID_RE = re.compile(r"\bP\d{3}\b")
+MED_RE = re.compile(r"\b[Dd]r[a]?\.?\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)")
+COST_RE = re.compile(r"(?:por\s+|costo\s*|presupuesto[^0-9]{0,20})(\d{3,6})|\b(\d{3,6})\s*(?:€|\$|USD|euros?)", re.I)
+DOC_KEYWORDS = {"identificacion": ["dni", "identificacion", "cedula"], "informe_medico": ["informe"],
+    "consentimiento": ["consentimiento"], "ecografia_abdominal": ["ecografia"],
+    "analitica": ["analitica", "analítica", "sangre"], "radiografia": ["radiografia"],
+    "segunda_opinion": ["segunda opinion"], "presupuesto_hospital": ["presupuesto", "costo", "€", "$"]}
+
+def extraer_desde_texto(texto: str) -> dict:
+    t = (texto or "").lower()
+    proc = next((p for p in PROCEDIMIENTOS_CONOCIDOS if p.lower() in t), "")
+    m = CIE_RE.search(texto or "")
+    docs = [d for d, kws in DOC_KEYWORDS.items() if any(k in t for k in kws)]
+    urg = "emergencia" if any(w in t for w in ["urgente", "emergencia", "emergency"]) else "programada"
+    mp = PID_RE.search(texto or "")
+    mm = MED_RE.search(texto or "")
+    mc = COST_RE.search(texto or "")
+    costo = None
+    if mc:
+        costo = int(next(g for g in mc.groups() if g))
+    return {"procedimiento": proc, "cie": m.group(0) if m else "", "documentos": docs, "urgencia": urg,
+            "paciente_id": mp.group(0) if mp else "",
+            "medico": mm.group(0).strip() if mm else "",
+            "costo": costo}
 
 SYSTEM = """Eres extractor de informes quirúrgicos. Devuelve SOLO JSON válido:
 {"procedimiento": str, "cie": str, "urgencia": "programada|emergencia", "documentos": [str], "costo_estimado": null}

@@ -23,7 +23,7 @@ Sistema que elimina la espera de horas/días en la autorización de cirugías. R
                │ polling 60s / webhook
                ▼
 ┌────────────────────────────────────┐
-│ Agente Python (agente_preauth.py)  │
+│ Agente Python (preauth/reglas.py)  │
 │ 1. Cobertura  2. Carencia          │
 │ 3. Monto      4. Documentos        │
 └──────────────┬─────────────────────┘
@@ -70,7 +70,7 @@ Sistema que elimina la espera de horas/días en la autorización de cirugías. R
 | autorizacion_id | Rich text | `AUT-P001-20260926`, solo si aprobada |
 | timestamp | Created time | Auditoría |
 
-## 4. Motor de reglas (`evaluar()` en `agente_preauth.py:47`)
+## 4. Motor de reglas (`evaluar()` en `preauth/reglas.py:47`)
 
 Orden estricto, el primero que falla corta (fail-fast):
 
@@ -95,7 +95,7 @@ export NOTION_DB_POLIZAS="id_db_polizas"
 export NOTION_DB_RESOLUCIONES="id_db_resoluciones"
 
 # 3. Prueba local (sin Notion)
-python3 agente_preauth.py
+python -m preauth.reglas
 # Salida esperada: Caso 1 PREAPROBADA, Caso 2 FALTANTES, Caso 3 DENEGADA
 ```
 

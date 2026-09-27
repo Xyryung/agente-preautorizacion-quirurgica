@@ -14,9 +14,7 @@ from datetime import date
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-# Importa SOLO el motor de reglas. No importes notion_sync aqui:
-# lee os.environ al importarse y tumbaria el servidor si falta una variable.
-from agente_preauth import InformeMedico, Poliza, evaluar
+from preauth.reglas import InformeMedico, Poliza, evaluar
 
 app = FastAPI(title="Agente de Pre-Autorización Quirúrgica", version="0.1.0")
 
