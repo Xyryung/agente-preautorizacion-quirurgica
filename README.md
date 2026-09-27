@@ -1,5 +1,16 @@
 # Agente de Pre-Autorización Quirúrgica en Tiempo Real
 
+[![CI](https://github.com/Xyryung/agente-preautorizacion-quirurgica/actions/workflows/ci.yml/badge.svg)](https://github.com/Xyryung/agente-preautorizacion-quirurgica/actions/workflows/ci.yml)
+
+**Demo pública:** https://agente-preautorizacion.onrender.com (plan gratuito: la primera visita tras 15 min sin uso puede tardar ~1 min en despertar).
+
+## Pruebas
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
 ## 1. Resumen ejecutivo
 Sistema que elimina la espera de horas/días en la autorización de cirugías. Recibe el **informe médico digital (Hospital)** y la **póliza (Aseguradora)** desde **Notion**, los cruza con reglas de negocio y emite en segundos: `PREAPROBADA`, `SOLICITUD_DOCUMENTOS_FALTANTES` o `DENEGADA`.
 
