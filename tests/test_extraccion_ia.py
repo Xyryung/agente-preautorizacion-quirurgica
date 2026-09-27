@@ -150,7 +150,8 @@ def test_texto_demasiado_largo_se_recorta_con_advertencia():
 def test_compatibilidad_mantiene_las_claves_del_diccionario():
     d = extraer_desde_texto(TEXTO)
     assert set(d) == {"procedimiento", "cie", "documentos", "urgencia",
-                      "paciente_id", "medico", "costo"}
+                      "paciente_id", "medico", "costo",
+                      "confianza", "citas_no_encontradas"}
 
 
 def test_compatibilidad_traduce_la_salida_del_modelo():

@@ -193,8 +193,12 @@ def extraer_desde_texto(texto: str, **opciones) -> dict:
     """Compatibilidad con notion_repo (autofill): mismo diccionario de siempre.
 
     Un valor vacio significa "sin dato": el autofill no escribe nada en Notion.
+    Incluye `confianza` y `citas_no_encontradas` para el 6b (van al
+    InformeMedico en memoria, sin columna en Notion).
     """
+    from preauth.reglas import DOCS_BASE, DOCS_POR_PROCEDIMIENTO
     d = extraer(texto, **opciones).datos
+    requeridos = DOCS_BASE + DOCS_POR_PROCEDIMIENTO.get(d.procedimiento, DOCS_POR_PROCEDIMIENTO["default"])
     return {
         "procedimiento": "" if d.procedimiento == DESCONOCIDO else d.procedimiento,
         "cie": d.cie10 or "",
@@ -203,6 +207,8 @@ def extraer_desde_texto(texto: str, **opciones) -> dict:
         "paciente_id": d.paciente_id or "",
         "medico": d.medico or "",
         "costo": d.costo_estimado,
+        "confianza": d.confianza,
+        "citas_no_encontradas": sorted(set(requeridos) - set(d.documentos_aportados)),
     }
 
 
