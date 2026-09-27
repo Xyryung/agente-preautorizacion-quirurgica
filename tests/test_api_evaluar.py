@@ -199,3 +199,16 @@ def test_pagina_incluye_casos_y_polizas_sin_gastar_cupo_de_la_api():
 def test_openapi_documenta_los_endpoints_nuevos():
     rutas = client.get("/openapi.json").json()["paths"]
     assert "/api/evaluar" in rutas and "/api/procesar-pendientes" in rutas
+
+
+def test_pagina_trae_los_campos_para_personalizar_la_poliza():
+    import json, re
+    datos = json.loads(re.search(r'<script id="datos" type="application/json">(.*?)</script>',
+                                 client.get("/").text, re.S).group(1))
+    p002 = datos["polizas"]["P002"]["campos"]
+    assert p002["cobertura"] == ["Artroplastia", "Cataratas", "Hernia inguinal"]
+    assert p002["carencia_meses"] == {"Artroplastia": 12, "default": 6}
+    assert p002["requiere_segunda_opinion"] == ["Artroplastia"]
+    # Los campos se pueden enviar tal cual como poliza personalizada
+    r = client.post("/api/evaluar", json={"poliza": p002, "informe": {"procedimiento": "Cataratas", "costo_estimado": 3000}})
+    assert r.status_code == 200

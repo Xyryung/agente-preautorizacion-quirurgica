@@ -43,6 +43,15 @@
   .oculto { display: none; }
   code { font-size: .9em; }
   a { color: var(--acento); }
+  details { margin-top: 1rem; border: 1px dashed var(--linea); border-radius: 6px; padding: .5rem .8rem; }
+  summary { cursor: pointer; font-weight: 600; }
+  details[open] summary { margin-bottom: .6rem; }
+  input { width: 100%; font: inherit; color: var(--tinta); background: var(--fondo);
+          border: 1px solid var(--linea); border-radius: 6px; padding: .45rem; }
+  .campos { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem 1rem; }
+  .campos .ancho { grid-column: 1 / -1; }
+  @media (max-width: 700px) { .campos { grid-template-columns: 1fr; } }
+  .campos label { font-weight: 500; font-size: .85rem; margin-bottom: .15rem; }
 </style>
 </head>
 <body>
@@ -65,6 +74,25 @@ informe y las reglas de la póliza deciden: preaprobación, solicitud de documen
       <div class="ayuda" id="poliza-ayuda"></div>
     </div>
   </div>
+  <details id="personalizar">
+    <summary>Personalizar póliza (opcional)</summary>
+    <p class="ayuda" style="margin-top:0">Parte de la póliza elegida arriba. Cambia lo que quieras: se evaluará con tus datos.
+    Si eliges otra póliza o caso, estos campos se vuelven a llenar.</p>
+    <div class="campos">
+      <div class="ancho"><label for="p-cobertura">Procedimientos cubiertos (separados por coma)</label>
+        <input id="p-cobertura" placeholder="Colecistectomía, Hernia inguinal"></div>
+      <div><label for="p-fecha">Fecha de inicio de la póliza</label><input id="p-fecha" type="date"></div>
+      <div><label for="p-carencia">Carencia general (meses)</label><input id="p-carencia" type="number" min="0" step="1"></div>
+      <div class="ancho"><label for="p-carencias">Carencias por procedimiento (opcional)</label>
+        <input id="p-carencias" placeholder="Artroplastia=12, Cataratas=3"></div>
+      <div><label for="p-maximo">Monto máximo</label><input id="p-maximo" type="number" min="1" step="any"></div>
+      <div><label for="p-usado">Monto ya usado</label><input id="p-usado" type="number" min="0" step="any"></div>
+      <div><label for="p-exclusiones">Exclusiones (separadas por coma)</label>
+        <input id="p-exclusiones" placeholder="Rinoplastia estética"></div>
+      <div><label for="p-segunda">Requieren segunda opinión</label>
+        <input id="p-segunda" placeholder="Artroplastia"></div>
+    </div>
+  </details>
   <label for="texto" style="margin-top:1rem">3. Informe médico</label>
   <textarea id="texto" maxlength="8000" required
     placeholder="Ej.: Paciente P001. Colelitiasis (K80.2). Colecistectomía programada. Se adjuntan cédula, informe médico, consentimiento, ecografía abdominal y analítica. Presupuesto: 8000."></textarea>
@@ -116,7 +144,41 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
   for (const [id, p] of Object.entries(datos.polizas)) $("poliza").add(new Option(id + " — " + p.resumen, id));
   for (const c of datos.casos) $("caso").add(new Option(c.id + " · " + c.descripcion, c.id));
 
-  const mostrarPoliza = () => { $("poliza-ayuda").textContent = datos.polizas[$("poliza").value].descripcion; };
+  const lista = (v) => v.split(",").map((x) => x.trim()).filter(Boolean);
+  function llenarPersonalizada() {
+    const c = datos.polizas[$("poliza").value].campos;
+    $("p-cobertura").value = c.cobertura.join(", ");
+    $("p-fecha").value = c.fecha_inicio;
+    $("p-carencia").value = c.carencia_meses.default ?? 0;
+    $("p-carencias").value = Object.entries(c.carencia_meses)
+      .filter(([k]) => k !== "default").map(([k, v]) => k + "=" + v).join(", ");
+    $("p-maximo").value = c.monto_maximo;
+    $("p-usado").value = c.monto_usado;
+    $("p-exclusiones").value = c.exclusiones.join(", ");
+    $("p-segunda").value = c.requiere_segunda_opinion.join(", ");
+  }
+  function leerPersonalizada() {
+    const carencia = { default: Number($("p-carencia").value || 0) };
+    for (const par of lista($("p-carencias").value)) {
+      const [nombre, meses] = par.split(/[=:]/).map((x) => x.trim());
+      if (!nombre || meses === undefined || !/^\d+$/.test(meses))
+        throw new Error("Carencias por procedimiento: usa el formato Procedimiento=meses (ej.: Artroplastia=12).");
+      carencia[nombre] = Number(meses);
+    }
+    const cobertura = lista($("p-cobertura").value);
+    if (!cobertura.length) throw new Error("La póliza personalizada debe cubrir al menos un procedimiento.");
+    if (!$("p-fecha").value) throw new Error("Indica la fecha de inicio de la póliza.");
+    if (!(Number($("p-maximo").value) > 0)) throw new Error("El monto máximo debe ser mayor que 0.");
+    return {
+      paciente_id: $("poliza").value, cobertura, fecha_inicio: $("p-fecha").value, carencia_meses: carencia,
+      monto_maximo: Number($("p-maximo").value), monto_usado: Number($("p-usado").value || 0),
+      exclusiones: lista($("p-exclusiones").value), requiere_segunda_opinion: lista($("p-segunda").value),
+    };
+  }
+  const mostrarPoliza = () => {
+    $("poliza-ayuda").textContent = datos.polizas[$("poliza").value].descripcion;
+    llenarPersonalizada();
+  };
   const contar = () => { $("contador").textContent = $("texto").value.length; };
   $("poliza").addEventListener("change", mostrarPoliza);
   $("texto").addEventListener("input", contar);
@@ -144,7 +206,8 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
     $("decision").textContent = DECISIONES[r.decision] || r.decision;
     $("decision").className = "decision " + r.decision;
     $("motivo").textContent = r.motivo;
-    $("autorizacion").textContent = r.autorizacion_id ? "Autorización: " + r.autorizacion_id : "";
+    $("autorizacion").textContent = (r.autorizacion_id ? "Autorización: " + r.autorizacion_id + ". " : "") +
+      ($("personalizar").open ? "Evaluado con tu póliza personalizada." : "Póliza " + r.poliza_id + ".");
     $("hallazgos").replaceChildren();
     for (const h of r.hallazgos) item($("hallazgos"), (RESULTADOS[h.resultado] || "") + " " + h.regla + ": " + h.mensaje, "r-" + h.resultado);
     $("faltantes").replaceChildren();
@@ -180,11 +243,14 @@ Código en <a href="https://github.com/Xyryung/agente-preautorizacion-quirurgica
     try {
       const resp = await fetch("/api/evaluar", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ poliza_id: $("poliza").value, texto }),
+        body: JSON.stringify($("personalizar").open
+          ? { poliza: leerPersonalizada(), texto }
+          : { poliza_id: $("poliza").value, texto }),
       });
       const cuerpo = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         const d = cuerpo.detail;
+        if (Array.isArray(d)) throw new Error("Revisa los datos: " + d.map((e) => e.msg).join("; "));
         throw new Error(typeof d === "string" ? d : "No se pudo evaluar el informe (" + resp.status + ").");
       }
       pintar(cuerpo);

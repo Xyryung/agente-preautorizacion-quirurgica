@@ -82,9 +82,20 @@ def _resumen(p: Poliza) -> str:
     return f"{', '.join(p.cobertura_procedimientos)} (saldo {p.monto_maximo - p.monto_usado:,.0f})"
 
 
+def _campos(p: Poliza) -> dict:
+    """Los mismos nombres que PolizaEntrada: la pagina los edita y los envia tal cual."""
+    return {
+        "paciente_id": p.paciente_id, "cobertura": p.cobertura_procedimientos,
+        "fecha_inicio": p.fecha_inicio.isoformat(), "carencia_meses": p.carencia_meses,
+        "monto_maximo": p.monto_maximo, "monto_usado": p.monto_usado,
+        "exclusiones": p.exclusiones, "requiere_segunda_opinion": p.requiere_segunda_opinion,
+    }
+
+
 def _datos_pagina() -> str:
     datos = {
-        "polizas": {pid: {"resumen": _resumen(d.poliza), "descripcion": d.descripcion}
+        "polizas": {pid: {"resumen": _resumen(d.poliza), "descripcion": d.descripcion,
+                          "campos": _campos(d.poliza)}
                     for pid, d in POLIZAS_DEMO.items()},
         "casos": CASOS,
     }
