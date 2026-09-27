@@ -339,3 +339,24 @@ def test_informe_sin_poliza_procesado_dos_veces_no_duplica(monkeypatch):
     nr.procesar_informe(notion, "res", _informe(), autofill=False)
     assert len(notion.creadas) == 1
     assert _marcado_procesado(notion)
+
+
+def test_fetch_poliza_con_paciente_vacio_no_consulta_notion(monkeypatch):
+    # Notion devuelve TODAS las polizas al filtrar un titulo vacio (visto en produccion).
+    def no_deberia_consultar(*a, **k):
+        raise AssertionError("no se consulta Notion sin paciente_id")
+    monkeypatch.setattr(nr, "query_all", no_deberia_consultar)
+    assert nr.fetch_poliza("") == (None, None)
+    assert nr.fetch_poliza("   ") == (None, None)
+
+
+def test_fetch_poliza_ignora_polizas_de_otro_paciente(monkeypatch):
+    from preauth import esquema as E
+    ajena = {"id": "pol-p004", "properties": {
+        E.POL_PACIENTE_ID: {"title": [{"plain_text": "P004"}]},
+        E.POL_COBERTURA: {"multi_select": [{"name": "Hernia inguinal"}]},
+        E.POL_FECHA_INICIO: {"date": {"start": "2023-06-01"}},
+        E.POL_MONTO_MAX: {"number": 10000}}}
+    monkeypatch.setattr(nr, "data_sources_ids", lambda: {"polizas": "p"})
+    monkeypatch.setattr(nr, "query_all", lambda *a, **k: [ajena])
+    assert nr.fetch_poliza("P999") == (None, None)

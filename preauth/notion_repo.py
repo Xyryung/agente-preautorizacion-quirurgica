@@ -132,10 +132,17 @@ def fetch_poliza(paciente_id: str, dormir=time.sleep):
 
     Devuelve (poliza, page_id) para poder persistir la reserva (issue #15).
     """
+    paciente_id = (paciente_id or "").strip()
+    if not paciente_id:
+        # Notion devuelve TODAS las polizas al filtrar un titulo vacio (#43).
+        return None, None
     ds = data_sources_ids()["polizas"]
     pags = query_all(ds, dormir=dormir,
         filter={"property": E.POL_PACIENTE_ID, "title": {"equals": paciente_id}})
     for pg in pags:
+        # Defensa: nunca evaluar con la poliza de otro paciente.
+        if get_text(pg["properties"], E.POL_PACIENTE_ID).strip() != paciente_id:
+            continue
         pol = _poliza_desde_props(paciente_id, pg["properties"])
         if pol:
             return pol, pg["id"]
