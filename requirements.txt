@@ -1,0 +1,9 @@
+# Dependencias de ejecucion (las que instala Render).
+# Cuando todo funcione en local, fija versiones exactas con las que
+# muestra `pip list` (ver issue de reestructuracion del repositorio).
+fastapi
+uvicorn[standard]
+notion-client
+openai
+pydantic
+python-dotenv
